@@ -1,0 +1,119 @@
+@import "tailwindcss";
+
+@theme {
+  --color-canvas: #fafafa;
+  --color-panel: #ffffff;
+  --color-panel-raised: #f3f4f6;
+  --color-border: #e5e7eb;
+  --color-border-strong: #d1d5db;
+
+  --color-text: #111827;
+  --color-text-muted: #6b7280;
+  --color-text-faint: #9ca3af;
+
+  --color-accent: #2563eb;
+  --color-accent-bg: rgba(37, 99, 235, 0.08);
+  --color-accent-border: rgba(37, 99, 235, 0.35);
+
+  --color-pass: #15803d;
+  --color-pass-bg: rgba(21, 128, 61, 0.08);
+  --color-review: #b45309;
+  --color-review-bg: rgba(180, 83, 9, 0.08);
+  --color-fail: #dc2626;
+  --color-fail-bg: rgba(220, 38, 38, 0.08);
+  --color-missing: #6b7280;
+  --color-missing-bg: rgba(107, 114, 128, 0.1);
+
+  --font-sans: "Inter", system-ui, "Segoe UI", Roboto, sans-serif;
+}
+
+:root {
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-canvas);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+@media print {
+  @page {
+    margin: 14mm;
+  }
+
+  /* Sidebar, top bar, buttons and other chrome. */
+  .no-print {
+    display: none !important;
+  }
+
+  /* The shell is a fixed-height flex viewport on screen; printing needs it to
+     flow naturally so content isn't clipped to one screenful. */
+  html,
+  body,
+  #root {
+    height: auto !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+
+  #root > div {
+    display: block !important;
+    height: auto !important;
+    width: auto !important;
+    overflow: visible !important;
+  }
+
+  main {
+    overflow: visible !important;
+    padding: 0 !important;
+  }
+
+  /* Keep status badges legible — browsers strip backgrounds by default. */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Avoid awkward breaks inside a card, a table row, or a finding. */
+  .report-block,
+  .report-item,
+  tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+
+  /* Tables scroll horizontally on screen; on paper they must simply fit. */
+  .report-root .overflow-x-auto {
+    overflow: visible !important;
+  }
+
+  .report-root table {
+    min-width: 0 !important;
+    width: 100% !important;
+    font-size: 11px;
+  }
+}

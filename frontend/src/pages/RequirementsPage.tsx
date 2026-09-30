@@ -14,9 +14,9 @@ import { EmptyState } from '../components/ui/EmptyState'
 import { IconListChecks, IconSpinner } from '../components/icons'
 
 export function RequirementsPage() {
-  const { dashboard, loading: demoLoading, loadDemo } = useDemo()
+  const { dashboard, bids, selectedBidId: bidId, loading: demoLoading, loadDemo } = useDemo()
   const tenderId = dashboard?.demo_tender_id ?? null
-  const bidId = dashboard?.demo_bid_id ?? null
+  const selectedBid = bids.find((b) => b.id === bidId) ?? null
 
   const {
     data,
@@ -75,7 +75,11 @@ export function RequirementsPage() {
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Requirements"
-        description={data.tender.title}
+        description={
+          selectedBid
+            ? `${data.tender.title} — status shown for ${selectedBid.bidder_name}`
+            : data.tender.title
+        }
       />
 
       <div className="grid grid-cols-3 gap-4">

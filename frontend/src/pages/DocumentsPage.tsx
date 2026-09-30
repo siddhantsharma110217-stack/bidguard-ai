@@ -11,8 +11,7 @@ import { EmptyState } from '../components/ui/EmptyState'
 import { IconFolder, IconScanLine, IconAlertTriangle } from '../components/icons'
 
 export function DocumentsPage() {
-  const { dashboard, loading: demoLoading, loadDemo } = useDemo()
-  const bidId = dashboard?.demo_bid_id ?? null
+  const { selectedBidId: bidId, loading: demoLoading, loadDemo } = useDemo()
 
   const { data, loading, error, reload } = useApi(
     () => getBidDocuments(bidId as number),
@@ -85,6 +84,25 @@ export function DocumentsPage() {
           <div className="mt-2 text-sm font-semibold text-text">{data.bid.status}</div>
         </Card>
       </div>
+
+      {/* `?? []`: tolerate a backend deployed before contact details existed. */}
+      {(data.contact ?? []).length > 0 && (
+        <Card className="p-5">
+          <h2 className="mb-3 text-sm font-semibold text-text">Bidder Contact Details</h2>
+          <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {(data.contact ?? []).map((c) => (
+              <div key={c.field}>
+                <dt className="text-xs text-text-faint">{c.label}</dt>
+                <dd className="mt-0.5 text-sm font-medium text-text">{c.value}</dd>
+                <dd className="mt-0.5 text-xs text-text-faint">
+                  {c.source_document}
+                  {c.source_page > 0 && `, page ${c.source_page}`}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </Card>
+      )}
 
       <Card className="overflow-x-auto">
         <table className="w-full min-w-[720px] text-sm">

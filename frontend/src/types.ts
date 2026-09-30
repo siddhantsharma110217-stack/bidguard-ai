@@ -75,11 +75,23 @@ export interface Bid {
   evaluated_at: string | null
 }
 
+/** One bidder contact detail, as extracted from a submitted document. */
+export interface ContactField {
+  field: string
+  label: string
+  value: string
+  source_document: string
+  source_document_id: number
+  source_page: number
+}
+
 export interface BidDocuments {
   bid: Bid
   tender: Tender
   total: number
   documents: BidDocument[]
+  /** Absent from backends that predate contact extraction. */
+  contact?: ContactField[]
 }
 
 export interface EvaluationResult {
@@ -124,9 +136,12 @@ export interface EvaluationResults {
 
 export interface DemoLoadResult {
   tender: Tender
+  /** The primary demo bid (first of `bids`). */
   bid: Bid
+  bids: Bid[]
   requirement_count: number
   document_count: number
+  bidder_count: number
 }
 
 export interface Dashboard {
@@ -137,6 +152,8 @@ export interface Dashboard {
   demo_loaded: boolean
   demo_tender_id: number | null
   demo_bid_id: number | null
+  /** Every bid on the demo tender, in submission order. */
+  demo_bid_ids: number[]
 }
 
 export interface ApiErrorBody {

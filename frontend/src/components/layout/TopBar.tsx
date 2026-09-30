@@ -3,6 +3,7 @@ import { getHealth } from '../../api/client'
 import type { HealthStatus } from '../../types'
 import { Badge } from '../ui/Badge'
 import { IconDot } from '../icons'
+import { BidderPicker } from './BidderPicker'
 
 type ConnectionState = 'checking' | 'online' | 'offline'
 
@@ -42,6 +43,7 @@ export function TopBar() {
       </div>
 
       <div className="flex items-center gap-3">
+        <BidderPicker />
         {state === 'checking' && (
           <Badge tone="neutral">
             <IconDot className="animate-pulse" />

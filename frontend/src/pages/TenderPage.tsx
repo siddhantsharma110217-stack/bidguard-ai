@@ -1,7 +1,5 @@
-import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { getRequirements, listBids } from '../api/client'
-import type { Bid } from '../types'
+import { getRequirements } from '../api/client'
 import { useDemo } from '../context/DemoContext'
 import { useEvaluation } from '../context/EvaluationContext'
 import { useApi } from '../hooks/useApi'
@@ -34,7 +32,15 @@ function MetaRow({ label, value }: { label: string; value: string | number | nul
 }
 
 export function TenderPage() {
-  const { dashboard, loading: demoLoading, loadDemo, error: demoError } = useDemo()
+  const {
+    dashboard,
+    bids,
+    selectedBidId,
+    selectBid,
+    loading: demoLoading,
+    loadDemo,
+    error: demoError,
+  } = useDemo()
   const tenderId = dashboard?.demo_tender_id ?? null
 
   const { data, loading, error, reload } = useApi(
@@ -43,14 +49,9 @@ export function TenderPage() {
     tenderId != null,
   )
 
-  // Bids for this tender. Fetched as a list (not a single id) so a bid
-  // selector can be added later without changing the data flow.
-  const { data: allBids } = useApi(listBids, [tenderId], tenderId != null)
-  const bids = useMemo<Bid[]>(
-    () => (allBids ?? []).filter((b) => b.tender_id === tenderId),
-    [allBids, tenderId],
-  )
-  const activeBid = bids.find((b) => b.id === dashboard?.demo_bid_id) ?? bids[0] ?? null
+  // Bids for this tender come from the shared context, so the table below and
+  // the top-bar bidder picker always agree on which bid is selected.
+  const activeBid = bids.find((b) => b.id === selectedBidId) ?? null
 
   const { results: evaluation, running } = useEvaluation()
 
@@ -183,6 +184,70 @@ export function TenderPage() {
           </p>
         ) : (
           <>
+            <div className="-mx-5 mb-5 overflow-x-auto border-y border-border">
+              <table className="w-full min-w-[640px] text-sm">
+                <thead>
+                  <tr className="border-b border-border text-left text-xs font-medium uppercase tracking-wide text-text-faint">
+                    <th className="px-5 py-2.5">Bidder</th>
+                    <th className="px-5 py-2.5">Status</th>
+                    <th className="px-5 py-2.5">Compliance</th>
+                    <th className="px-5 py-2.5">Risk</th>
+                    <th className="px-5 py-2.5">Responsiveness</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {bids.map((bid) => {
+                    const selected = bid.id === activeBid.id
+                    const evaluated = bid.status === 'EVALUATED'
+                    return (
+                      <tr
+                        key={bid.id}
+                        onClick={() => selectBid(bid.id)}
+                        aria-selected={selected}
+                        className={`cursor-pointer border-b border-border last:border-0 ${
+                          selected ? 'bg-accent-bg' : 'hover:bg-panel-raised'
+                        }`}
+                      >
+                        <td className="px-5 py-2.5">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              selectBid(bid.id)
+                            }}
+                            className={`text-left font-medium ${selected ? 'text-accent' : 'text-text'}`}
+                          >
+                            {bid.bidder_name}
+                          </button>
+                        </td>
+                        <td className="px-5 py-2.5 text-text-muted">{bid.status}</td>
+                        <td className="px-5 py-2.5 tabular-nums text-text">
+                          {evaluated ? `${bid.compliance_score}%` : '—'}
+                        </td>
+                        <td className="px-5 py-2.5">
+                          {evaluated ? (
+                            <RiskBadge band={bid.risk_band} score={bid.risk_score} />
+                          ) : (
+                            <span className="text-text-faint">—</span>
+                          )}
+                        </td>
+                        <td className="px-5 py-2.5">
+                          {evaluated ? (
+                            <GateBadge status={bid.gate_status} />
+                          ) : (
+                            <span className="text-text-faint">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <h3 className="mb-3 text-xs font-medium uppercase tracking-wide text-text-faint">
+              Selected Bid
+            </h3>
             <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
               <MetaRow label="Bidder" value={activeBid.bidder_name} />
               <MetaRow label="Bid Status" value={activeBid.status} />

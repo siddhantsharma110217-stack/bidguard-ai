@@ -17,10 +17,11 @@ from sqlalchemy.orm import Session
 
 from app.api.bids import get_bid_or_404
 from app.audit import REASON_CATEGORIES, append_event, utc_timestamp
+from app.auth import current_user, require_officer
 from app.db import get_db
 from app.evaluation.evaluator import get_evaluator
 from app.evaluation.scoring import VERDICTS, compute_summary, score_for_verdict
-from app.models import Bid, Document, Evaluation, Evidence, Requirement
+from app.models import Bid, Document, Evaluation, Evidence, Requirement, User
 from app.schemas import (
     BidOut,
     EvaluationCreate,
@@ -31,7 +32,9 @@ from app.schemas import (
     TenderOut,
 )
 
-router = APIRouter(prefix="/api/evaluations", tags=["evaluations"])
+router = APIRouter(
+    prefix="/api/evaluations", tags=["evaluations"], dependencies=[Depends(current_user)]
+)
 
 MIN_REASON_LENGTH = 15
 
@@ -96,6 +99,7 @@ def _run_evaluation(bid_id: int, db: Session) -> None:
             row.override_reason,
             row.override_category,
             row.officer_name,
+            row.officer_username,
             row.overridden_at,
         )
         for row in prior
@@ -136,6 +140,7 @@ def _run_evaluation(bid_id: int, db: Session) -> None:
                 row.override_reason,
                 row.override_category,
                 row.officer_name,
+                row.officer_username,
                 row.overridden_at,
             ) = override
         db.add(row)
@@ -211,6 +216,7 @@ def _load_results(bid_id: int, db: Session) -> EvaluationResultsOut:
                 override_reason=row.override_reason or "",
                 override_category=row.override_category or "",
                 officer_name=row.officer_name or "",
+                officer_username=row.officer_username or "",
                 overridden_at=row.overridden_at,
             )
         )
@@ -248,14 +254,23 @@ def get_evaluation_results(bid_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/{bid_id}/overrides", response_model=EvaluationResultsOut, status_code=201)
-def create_override(bid_id: int, payload: OverrideCreate, db: Session = Depends(get_db)):
-    """Record an officer's verdict for one requirement and audit it."""
+def create_override(
+    bid_id: int,
+    payload: OverrideCreate,
+    db: Session = Depends(get_db),
+    officer: User = Depends(require_officer),
+):
+    """Record an officer's verdict for one requirement and audit it.
+
+    The officer is the logged-in user: the name and username on the
+    evaluation row and the audit event come from the session only.
+    """
     bid = get_bid_or_404(bid_id, db)
 
     verdict = payload.verdict.strip().upper()
     category = payload.reason_category.strip().upper()
     reason = payload.reason.strip()
-    officer_name = payload.officer_name.strip()
+    officer_name = officer.full_name
 
     if verdict not in VERDICTS:
         raise HTTPException(
@@ -279,8 +294,6 @@ def create_override(bid_id: int, payload: OverrideCreate, db: Session = Depends(
                 "characters are required."
             ),
         )
-    if not officer_name:
-        raise HTTPException(status_code=422, detail="The officer's name is required.")
 
     row = (
         db.query(Evaluation)
@@ -311,12 +324,14 @@ def create_override(bid_id: int, payload: OverrideCreate, db: Session = Depends(
         row.override_reason = ""
         row.override_category = ""
         row.officer_name = ""
+        row.officer_username = ""
         row.overridden_at = None
     else:
         row.officer_verdict = verdict
         row.override_reason = reason
         row.override_category = category
         row.officer_name = officer_name
+        row.officer_username = officer.username
         row.overridden_at = at
 
     append_event(
@@ -333,6 +348,7 @@ def create_override(bid_id: int, payload: OverrideCreate, db: Session = Depends(
         reason=reason,
         reason_category=category,
         officer_name=officer_name,
+        officer_username=officer.username,
     )
 
     rows = db.query(Evaluation).filter(Evaluation.bid_id == bid_id).all()

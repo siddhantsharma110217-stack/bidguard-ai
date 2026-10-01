@@ -4,6 +4,7 @@ import { ApiError } from '../api/client'
 import type { EvaluationResult, OverrideRequest, Verdict } from '../types'
 import { IconSpinner } from './icons'
 import { REASON_CATEGORIES } from '../overrideCategories'
+import { useAuth } from '../context/auth'
 
 const MIN_REASON_LENGTH = 15
 
@@ -18,21 +19,20 @@ interface OverrideFormProps {
 /** Officer override for one requirement. Mirrors the backend's validation so
  *  the officer sees problems before submitting; the backend still enforces it. */
 export function OverrideForm({ result, onSubmit, onCancel }: OverrideFormProps) {
+  const { user } = useAuth()
   const [verdict, setVerdict] = useState<Verdict>(
     VERDICTS.find((v) => v !== result.verdict) ?? 'PASS',
   )
   const [category, setCategory] = useState('')
   const [reason, setReason] = useState('')
-  const [officerName, setOfficerName] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const reasonLength = reason.trim().length
   const reasonOk = reasonLength >= MIN_REASON_LENGTH
-  const nameOk = officerName.trim().length > 0
   const categoryOk = category !== ''
   const changed = verdict !== result.verdict
-  const canSubmit = categoryOk && reasonOk && nameOk && changed && !submitting
+  const canSubmit = categoryOk && reasonOk && changed && !submitting
   const placeholder =
     REASON_CATEGORIES.find((c) => c.code === category)?.placeholder ??
     'Choose a reason category first'
@@ -48,7 +48,6 @@ export function OverrideForm({ result, onSubmit, onCancel }: OverrideFormProps) 
         verdict,
         reason_category: category,
         reason: reason.trim(),
-        officer_name: officerName.trim(),
       })
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'The override could not be saved.')
@@ -89,16 +88,13 @@ export function OverrideForm({ result, onSubmit, onCancel }: OverrideFormProps) 
           </select>
         </label>
 
-        <label className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-text-muted">Officer name</span>
-          <input
-            value={officerName}
-            onChange={(e) => setOfficerName(e.target.value)}
-            placeholder="Full name of the evaluating officer"
-            className={inputClass}
-            autoComplete="name"
-          />
-        </label>
+        <div className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-text-muted">Officer</span>
+          {/* Read-only: the backend records the logged-in officer. */}
+          <div className="rounded border border-border bg-panel-raised px-2.5 py-1.5 text-sm text-text">
+            {user ? `${user.full_name} (${user.designation})` : '—'}
+          </div>
+        </div>
       </div>
 
       <label className="flex flex-col gap-1">

@@ -4,7 +4,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import audit, bids, demo, evaluations, redflags, tenders, uploads
+from app.api import audit, auth, bids, demo, evaluations, redflags, tenders, uploads
 from app.api.uploads import MAX_FILES
 from app.config import settings
 from app.db import init_db
@@ -65,6 +65,7 @@ def health() -> dict:
     }
 
 
+app.include_router(auth.router)
 app.include_router(tenders.router)
 app.include_router(bids.router)
 app.include_router(evaluations.router)

@@ -3,7 +3,6 @@
 import re
 
 import pytest
-from fastapi.testclient import TestClient
 from sqlalchemy import text
 
 from app.audit import (
@@ -17,6 +16,7 @@ from app.audit import (
 )
 from app.db import engine
 from app.main import app
+from tests.auth_helpers import OFFICER_NAME, OFFICER_USERNAME, officer_client
 from app.models import AuditEvent, Document
 from app.seed import sample_data
 
@@ -26,7 +26,7 @@ REASON = "Original BIS certificate inspected in person; it is valid."
 
 @pytest.fixture(scope="module")
 def client():
-    with TestClient(app) as c:
+    with officer_client() as c:
         yield c
 
 
@@ -123,7 +123,8 @@ def test_override_changes_effective_verdict_and_scores(client, demo):
     assert r["overridden"] is True
     assert r["officer_verdict"] == "PASS"
     assert r["override_reason"] == REASON
-    assert r["officer_name"] == "A. Sharma"
+    assert r["officer_name"] == OFFICER_NAME  # the logged-in officer
+    assert r["officer_username"] == OFFICER_USERNAME
     assert r["overridden_at"].endswith("+00:00")
     assert r["score"] == 100.0
 
@@ -145,6 +146,7 @@ def test_override_can_clear_the_gate(client, demo):
 
 
 def test_override_is_written_to_audit_log(client, demo):
+    # The request names someone else; the session's officer is recorded.
     _override(client, demo, "REQ-008", "REVIEW", officer="  R. Iyer ")
     event = client.get("/api/audit/events").json()[-1]
 
@@ -156,7 +158,8 @@ def test_override_is_written_to_audit_log(client, demo):
     assert event["system_verdict"] == "FAIL"
     assert event["officer_verdict"] == "REVIEW"
     assert event["reason"] == REASON
-    assert event["officer_name"] == "R. Iyer"
+    assert event["officer_name"] == OFFICER_NAME
+    assert event["officer_username"] == OFFICER_USERNAME
     assert event["timestamp"].endswith("+00:00")
     assert SHA256_RE.match(event["hash"])
 
@@ -169,7 +172,6 @@ def test_override_is_written_to_audit_log(client, demo):
         ({"category": "BECAUSE"}, 422, "a reason category is required"),
         ({"reason": "too short"}, 422, "at least 15 characters"),
         ({"reason": "   fourteen ch   "}, 422, "at least 15 characters"),
-        ({"officer": "   "}, 422, "officer's name is required"),
         ({"verdict": "MAYBE"}, 422, "verdict must be one of"),
         ({"verdict": "REVIEW"}, 409, "already review"),
     ],

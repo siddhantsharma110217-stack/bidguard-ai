@@ -157,6 +157,7 @@ class ResultOut(BaseModel):
     override_reason: str = ""
     override_category: str = ""
     officer_name: str = ""
+    officer_username: str = ""
     overridden_at: datetime | None = None
 
     @field_serializer("overridden_at")
@@ -165,11 +166,13 @@ class ResultOut(BaseModel):
 
 
 class OverrideCreate(BaseModel):
+    """The officer is always the logged-in user; any officer name a client
+    sends is ignored (unknown fields are dropped)."""
+
     requirement_id: int
     verdict: str
     reason_category: str = ""
     reason: str = ""
-    officer_name: str = ""
 
 
 class SummaryOut(BaseModel):
@@ -219,6 +222,7 @@ class AuditEventOut(BaseModel):
     reason: str
     reason_category: str
     officer_name: str
+    officer_username: str
     document_id: int | None
     document_name: str
     document_sha256: str
@@ -290,3 +294,31 @@ class UploadResultOut(BaseModel):
     extraction_label: str
     extraction_note: str
     documents: list[DocumentOut]
+
+
+class UserOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    username: str
+    full_name: str
+    designation: str
+    role: str  # OFFICER | REVIEWER
+
+
+class LoginIn(BaseModel):
+    username: str
+    password: str
+
+
+class LoginOut(BaseModel):
+    token: str
+    expires_at: int  # Unix timestamp
+    user: UserOut
+
+
+class DemoAccountOut(BaseModel):
+    username: str
+    full_name: str
+    designation: str
+    role: str
+    demo_password: str | None

@@ -151,15 +151,42 @@ export interface EvaluationResult {
   /** Reason category code; '' for overrides made before categories existed. */
   override_category: string
   officer_name: string
+  officer_username: string
   overridden_at: string | null
 }
 
+/** The officer is always the logged-in user; the backend takes the name
+ *  from the session, so the request carries none. */
 export interface OverrideRequest {
   requirement_id: number
   verdict: Verdict
   reason_category: string
   reason: string
-  officer_name: string
+}
+
+export type Role = 'OFFICER' | 'REVIEWER'
+
+export interface AuthUser {
+  username: string
+  full_name: string
+  designation: string
+  role: Role
+}
+
+export interface LoginResult {
+  token: string
+  /** Unix timestamp (seconds). */
+  expires_at: number
+  user: AuthUser
+}
+
+export interface DemoAccount {
+  username: string
+  full_name: string
+  designation: string
+  role: Role
+  /** Only while the password is still the published demo default. */
+  demo_password: string | null
 }
 
 export interface EvaluationSummary {
@@ -220,6 +247,8 @@ export interface AuditEvent {
   reason: string
   reason_category: string
   officer_name: string
+  /** '' on events recorded before officer login existed. */
+  officer_username: string
   document_id: number | null
   document_name: string
   document_sha256: string

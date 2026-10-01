@@ -22,6 +22,16 @@ class Settings(BaseSettings):
     # Uploaded bid PDFs: per-file size limit.
     max_upload_mb: int = 10
 
+    # --- Officer login (prototype) -------------------------------------
+    # DEMO DEFAULTS. Override every one of these through the environment
+    # for anything beyond a local demo.
+    demo_mode: bool = True  # login page may list the demo accounts
+    session_secret: str = "demo-only-session-secret-change-me"
+    session_ttl_minutes: int = 480
+    demo_officer1_password: str = "officer-demo-1"
+    demo_officer2_password: str = "officer-demo-2"
+    demo_reviewer_password: str = "reviewer-demo"
+
     database_url: str = "sqlite:///./bidguard.db"
     storage_dir: str = "./storage"
 

@@ -1,5 +1,8 @@
 import type {
   ApiErrorBody,
+  AuthUser,
+  DemoAccount,
+  LoginResult,
   AuditEvent,
   AuditVerification,
   Bid,
@@ -25,14 +28,29 @@ export class ApiError extends Error {
   }
 }
 
+// The session token lives in memory here (AuthProvider also keeps it in
+// sessionStorage so a page reload stays logged in). Every request sends it.
+let authToken: string | null = null
+let onUnauthorized: (() => void) | null = null
+
+export function setAuthToken(token: string | null): void {
+  authToken = token
+}
+
+/** Called when the backend rejects the session (expired, tampered, ...). */
+export function setUnauthorizedHandler(handler: (() => void) | null): void {
+  onUnauthorized = handler
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const headers: Record<string, string> = {}
+  // FormData bodies set their own multipart Content-Type (with boundary).
+  if (!(init?.body instanceof FormData)) headers['Content-Type'] = 'application/json'
+  if (authToken) headers['Authorization'] = `Bearer ${authToken}`
+
   let res: Response
   try {
-    res = await fetch(path, {
-      // FormData bodies set their own multipart Content-Type (with boundary).
-      headers: init?.body instanceof FormData ? undefined : { 'Content-Type': 'application/json' },
-      ...init,
-    })
+    res = await fetch(path, { ...init, headers })
   } catch {
     throw new ApiError(0, 'Could not reach the backend. Is it running?')
   }
@@ -50,6 +68,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     } catch {
       // response wasn't JSON — keep the message above, never surface raw HTML/stack traces
     }
+    if (res.status === 401 && authToken && onUnauthorized) onUnauthorized()
     throw new ApiError(res.status, message)
   }
 
@@ -136,4 +155,19 @@ export function uploadBid(
     method: 'POST',
     body: form,
   })
+}
+
+export function login(username: string, password: string): Promise<LoginResult> {
+  return request<LoginResult>('/api/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ username, password }),
+  })
+}
+
+export function getMe(): Promise<AuthUser> {
+  return request<AuthUser>('/api/auth/me')
+}
+
+export function getDemoAccounts(): Promise<DemoAccount[]> {
+  return request<DemoAccount[]>('/api/auth/demo-accounts')
 }

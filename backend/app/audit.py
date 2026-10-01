@@ -55,7 +55,7 @@ HASHED_FIELDS = (
 # hashed content only when non-empty, so events written before the field
 # existed keep verifying. Blanking or adding one later still changes the
 # hashed content, so tampering with it is detected either way.
-OPTIONAL_HASHED_FIELDS = ("reason_category",)
+OPTIONAL_HASHED_FIELDS = ("reason_category", "officer_username")
 
 
 def _sha256_json(payload: dict) -> str:
@@ -107,6 +107,7 @@ def append_event(db: Session, event_type: str, **fields) -> AuditEvent:
             "reason": "",
             "reason_category": "",
             "officer_name": "",
+            "officer_username": "",
             "document_id": None,
             "document_name": "",
             "document_sha256": "",

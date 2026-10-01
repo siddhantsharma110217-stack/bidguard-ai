@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.api.bids import contact_details
 from app.api.tenders import get_tender_or_404
 from app.audit import REASON_CATEGORIES
+from app.auth import current_user
 from app.db import get_db
 from app.models import Bid, Document, Evaluation
 from app.redflags import (
@@ -23,7 +24,9 @@ from app.redflags import (
 )
 from app.schemas import RedFlagReportOut, TenderOut
 
-router = APIRouter(prefix="/api/tenders", tags=["red-flags"])
+router = APIRouter(
+    prefix="/api/tenders", tags=["red-flags"], dependencies=[Depends(current_user)]
+)
 
 
 def document_text(doc: Document) -> str:

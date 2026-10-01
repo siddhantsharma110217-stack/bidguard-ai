@@ -3,12 +3,12 @@
 from pathlib import Path
 
 import pytest
-from fastapi.testclient import TestClient
 
 from app.extraction.pdf import read_pdf
 from app.extraction.rules import SourceDoc, extract_contacts
 from app.extraction.service import extract_bid
 from app.main import app
+from tests.auth_helpers import officer_client
 from app.redflags import normalize_contact
 from scripts.generate_sample_bids import APEX_SHARED_PHONE, SHARED_ACCOUNT
 from tests.pdf_helpers import COMPLIANT_PAGES, demo_requirements, make_pdf
@@ -142,7 +142,7 @@ def test_distinct_sample_values_do_not_match():
 
 @pytest.fixture(scope="module")
 def client():
-    with TestClient(app) as c:
+    with officer_client() as c:
         yield c
 
 

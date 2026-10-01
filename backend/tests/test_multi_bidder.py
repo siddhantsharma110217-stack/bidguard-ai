@@ -6,9 +6,9 @@ officer uses to switch between bidders.
 """
 
 import pytest
-from fastapi.testclient import TestClient
 
 from app.main import app
+from tests.auth_helpers import officer_client
 from app.models import Bid, Document, Tender
 from app.seed import sample_data
 from app.seed.loader import load_demo
@@ -120,7 +120,7 @@ def test_loader_adds_missing_bidders_to_an_older_single_bidder_demo(db):
 
 @pytest.fixture(scope="module")
 def client():
-    with TestClient(app) as c:
+    with officer_client() as c:
         yield c
 
 

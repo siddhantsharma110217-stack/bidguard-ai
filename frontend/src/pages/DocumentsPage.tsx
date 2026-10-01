@@ -11,11 +11,14 @@ import { ErrorState } from '../components/ui/ErrorState'
 import { EmptyState } from '../components/ui/EmptyState'
 import { IconFolder, IconScanLine, IconAlertTriangle } from '../components/icons'
 import { UploadBidPanel } from '../components/UploadBidPanel'
+import { useAuth } from '../context/auth'
 import { formatBytes } from '../extraction'
 
 export function DocumentsPage() {
   const { selectedBidId: bidId, loading: demoLoading, loadDemo } = useDemo()
   const [showUpload, setShowUpload] = useState(false)
+  // Only officers may upload bids; reviewers have read-only access.
+  const { isOfficer } = useAuth()
 
   const { data, loading, error, reload } = useApi(
     () => getBidDocuments(bidId as number),
@@ -30,7 +33,7 @@ export function DocumentsPage() {
     : null
 
   const uploadAction =
-    bidId != null ? (
+    bidId != null && isOfficer ? (
       <button
         onClick={() => setShowUpload((v) => !v)}
         className="rounded border border-accent-border bg-accent-bg px-3 py-1.5 text-xs font-medium text-accent hover:bg-accent-bg/80"
@@ -196,7 +199,7 @@ export function DocumentsPage() {
         }
         actions={uploadAction}
       />
-      {showUpload && <UploadBidPanel onClose={() => setShowUpload(false)} />}
+      {showUpload && isOfficer && <UploadBidPanel onClose={() => setShowUpload(false)} />}
       {body}
     </div>
   )

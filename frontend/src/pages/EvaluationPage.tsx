@@ -11,6 +11,7 @@ import { ErrorState } from '../components/ui/ErrorState'
 import { EmptyState } from '../components/ui/EmptyState'
 import { OverrideForm } from '../components/OverrideForm'
 import { EvidenceSource } from '../components/EvidenceSource'
+import { useAuth } from '../context/auth'
 import { categoryLabel } from '../overrideCategories'
 import { IconActivity, IconSpinner } from '../components/icons'
 
@@ -19,6 +20,8 @@ export function EvaluationPage() {
   const { results, loading, error, running, runError, bidId, run, override, reload } =
     useEvaluation()
   const [editingId, setEditingId] = useState<number | null>(null)
+  // Reviewers see every override but cannot make one (the API would 403).
+  const { isOfficer } = useAuth()
 
   // Tender / bidder names for the pre-evaluation card. Read from the API so
   // this panel describes whatever bid is actually loaded.
@@ -174,17 +177,21 @@ export function EvaluationPage() {
                           {r.override_reason}
                         </div>
                       )}
-                      <button
-                        onClick={() =>
-                          setEditingId(editingId === r.requirement_id ? null : r.requirement_id)
-                        }
-                        className="rounded border border-border-strong px-2 py-1 text-xs font-medium text-text hover:bg-panel"
-                      >
-                        {r.overridden ? 'Change' : 'Override'}
-                      </button>
+                      {isOfficer ? (
+                        <button
+                          onClick={() =>
+                            setEditingId(editingId === r.requirement_id ? null : r.requirement_id)
+                          }
+                          className="rounded border border-border-strong px-2 py-1 text-xs font-medium text-text hover:bg-panel"
+                        >
+                          {r.overridden ? 'Change' : 'Override'}
+                        </button>
+                      ) : (
+                        !r.overridden && <span className="text-xs text-text-faint">View only</span>
+                      )}
                     </td>
                   </tr>
-                  {editingId === r.requirement_id && (
+                  {isOfficer && editingId === r.requirement_id && (
                     <tr className="border-b border-border bg-panel-raised">
                       <td colSpan={6} className="px-4 pb-4 pt-1">
                         <OverrideForm

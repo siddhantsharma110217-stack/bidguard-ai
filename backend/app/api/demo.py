@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
+from app.auth import current_user
 from app.db import get_db
 from app.models import Bid, Tender
 from app.schemas import BidOut, DashboardOut, TenderOut
@@ -28,7 +29,7 @@ def load_demo_dataset(reset: bool = False, db: Session = Depends(get_db)):
     }
 
 
-@router.get("/dashboard", response_model=DashboardOut)
+@router.get("/dashboard", response_model=DashboardOut, dependencies=[Depends(current_user)])
 def dashboard(db: Session = Depends(get_db)):
     tenders = db.query(Tender).all()
     bids = db.query(Bid).all()

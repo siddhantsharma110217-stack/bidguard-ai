@@ -161,7 +161,12 @@ export function AuditPage() {
                   <td className="px-4 py-3">
                     <EventDetail event={e} />
                   </td>
-                  <td className="px-4 py-3 text-xs text-text">{e.officer_name || '—'}</td>
+                  <td className="px-4 py-3 text-xs text-text">
+                    {e.officer_name || '—'}
+                    {e.officer_username && (
+                      <div className="font-mono text-[11px] text-text-faint">{e.officer_username}</div>
+                    )}
+                  </td>
                   <td className="px-4 py-3 font-mono text-[11px] whitespace-nowrap text-text-faint">
                     <div title={e.hash}>{shortHash(e.hash)}</div>
                     <div title={e.prev_hash} className="mt-0.5">

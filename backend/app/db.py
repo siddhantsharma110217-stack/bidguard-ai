@@ -20,6 +20,14 @@ def init_db() -> None:
 
     Base.metadata.create_all(bind=engine)
     _add_missing_columns()
+
+    from app.auth import seed_users
+
+    db = SessionLocal()
+    try:
+        seed_users(db)
+    finally:
+        db.close()
     settings.storage_path  # ensures storage dirs exist
     for sub in ("tenders", "bids", "text", "reports"):
         (settings.storage_path / sub).mkdir(parents=True, exist_ok=True)
@@ -36,7 +44,10 @@ def get_db():
 # Columns added after the first release. `create_all` never alters existing
 # tables, so add them in place on databases created by an older build.
 _LATE_COLUMNS = {
-    "audit_events": {"reason_category": "VARCHAR DEFAULT ''"},
+    "audit_events": {
+        "reason_category": "VARCHAR DEFAULT ''",
+        "officer_username": "VARCHAR DEFAULT ''",
+    },
     "documents": {
         "sha256": "VARCHAR DEFAULT ''",
         "source": "VARCHAR DEFAULT 'SAMPLE'",
@@ -50,6 +61,7 @@ _LATE_COLUMNS = {
         "officer_verdict": "VARCHAR",
         "override_reason": "TEXT DEFAULT ''",
         "override_category": "VARCHAR DEFAULT ''",
+        "officer_username": "VARCHAR DEFAULT ''",
         "officer_name": "VARCHAR DEFAULT ''",
         "overridden_at": "DATETIME",
     },

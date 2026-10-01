@@ -5,14 +5,14 @@ Mirrors exactly what the browser demo does:
 """
 
 import pytest
-from fastapi.testclient import TestClient
 
 from app.main import app
+from tests.auth_helpers import officer_client
 
 
 @pytest.fixture(scope="module")
 def client():
-    with TestClient(app) as c:
+    with officer_client() as c:
         yield c
 
 

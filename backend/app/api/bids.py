@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app.auth import current_user, require_officer
 from app.db import get_db
 from app.models import Bid, Document, Tender
 from app.schemas import (
@@ -15,7 +16,9 @@ from app.extraction.pdf import NO_TEXT_LABEL
 from app.extraction.service import MODE_LABELS
 from app.seed.sample_data import CONTACT_FIELDS
 
-router = APIRouter(prefix="/api/bids", tags=["bids"])
+router = APIRouter(
+    prefix="/api/bids", tags=["bids"], dependencies=[Depends(current_user)]
+)
 
 
 def get_bid_or_404(bid_id: int, db: Session) -> Bid:
@@ -89,7 +92,7 @@ def list_bids(tender_id: int | None = None, db: Session = Depends(get_db)):
     return query.order_by(Bid.id).all()
 
 
-@router.post("", response_model=BidOut, status_code=201)
+@router.post("", response_model=BidOut, status_code=201, dependencies=[Depends(require_officer)])
 def create_bid(payload: BidCreate, db: Session = Depends(get_db)):
     if db.get(Tender, payload.tender_id) is None:
         raise HTTPException(

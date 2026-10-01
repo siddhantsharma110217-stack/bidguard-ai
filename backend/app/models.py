@@ -185,6 +185,7 @@ class Evaluation(Base):
     # categories existed.
     override_category: Mapped[str] = mapped_column(String, default="")
     officer_name: Mapped[str] = mapped_column(String, default="")
+    officer_username: Mapped[str] = mapped_column(String, default="")
     overridden_at: Mapped[datetime | None] = mapped_column(nullable=True)
 
     bid: Mapped["Bid"] = relationship(back_populates="evaluations")
@@ -281,6 +282,9 @@ class AuditEvent(Base):
     reason: Mapped[str] = mapped_column(Text, default="")
     reason_category: Mapped[str] = mapped_column(String, default="")
     officer_name: Mapped[str] = mapped_column(String, default="")
+    # Login of the officer who made the change ("" on events recorded
+    # before officer login existed).
+    officer_username: Mapped[str] = mapped_column(String, default="")
 
     document_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     document_name: Mapped[str] = mapped_column(String, default="")
@@ -288,3 +292,15 @@ class AuditEvent(Base):
 
     prev_hash: Mapped[str] = mapped_column(String, nullable=False)
     hash: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+
+
+class User(Base):
+    """A prototype login account, seeded from configuration (app.auth)."""
+
+    __tablename__ = "users"
+
+    username: Mapped[str] = mapped_column(String, primary_key=True)
+    full_name: Mapped[str] = mapped_column(String, nullable=False)
+    designation: Mapped[str] = mapped_column(String, default="")
+    role: Mapped[str] = mapped_column(String, nullable=False)  # OFFICER | REVIEWER
+    password_hash: Mapped[str] = mapped_column(String, nullable=False)  # salted scrypt

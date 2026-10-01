@@ -4,10 +4,12 @@ import type { HealthStatus } from '../../types'
 import { Badge } from '../ui/Badge'
 import { IconDot } from '../icons'
 import { BidderPicker } from './BidderPicker'
+import { useAuth } from '../../context/auth'
 
 type ConnectionState = 'checking' | 'online' | 'offline'
 
 export function TopBar() {
+  const { user, logout } = useAuth()
   const [state, setState] = useState<ConnectionState>('checking')
   const [health, setHealth] = useState<HealthStatus | null>(null)
 
@@ -66,6 +68,20 @@ export function TopBar() {
             <IconDot />
             Backend unreachable
           </Badge>
+        )}
+        {user && (
+          <div className="flex items-center gap-2 border-l border-border pl-3">
+            <span className="text-xs text-text-muted">
+              Logged in as <span className="font-medium text-text">{user.full_name}</span> (
+              {user.role})
+            </span>
+            <button
+              onClick={() => logout()}
+              className="rounded border border-border-strong px-2 py-1 text-xs font-medium text-text hover:bg-panel-raised"
+            >
+              Log out
+            </button>
+          </div>
         )}
       </div>
     </header>

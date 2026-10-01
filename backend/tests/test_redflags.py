@@ -3,9 +3,9 @@
 import copy
 
 import pytest
-from fastapi.testclient import TestClient
 
 from app.main import app
+from tests.auth_helpers import OFFICER_NAME, officer_client
 from app.models import Bid, Document, Tender
 from app.redflags import (
     DISCLAIMER,
@@ -227,7 +227,7 @@ def test_different_system_verdicts_are_not_compared():
 
 @pytest.fixture(scope="module")
 def client():
-    with TestClient(app) as c:
+    with officer_client() as c:
         yield c
 
 
@@ -309,7 +309,7 @@ def test_override_creates_and_resolves_inconsistent_treatment(client, demo):
     assert {b["bidder_name"] for b in f["bidders"]} == {TECHNOVA, APEX}
     by_name = {e["bidder_name"]: e for e in f["evidence"]}
     assert by_name[TECHNOVA]["label"] == "FAIL → PASS"
-    assert "A. Sharma" in by_name[TECHNOVA]["detail"] and REASON in by_name[TECHNOVA]["detail"]
+    assert OFFICER_NAME in by_name[TECHNOVA]["detail"] and REASON in by_name[TECHNOVA]["detail"]
     assert "(Clarification received from bidder)" in by_name[TECHNOVA]["detail"]
     assert by_name[APEX]["label"] == "FAIL → FAIL"
     assert "45" in by_name[TECHNOVA]["value"] and "40" in by_name[APEX]["value"]

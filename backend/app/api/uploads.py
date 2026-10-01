@@ -22,15 +22,18 @@ from sqlalchemy.orm import Session
 from app.api.bids import document_out
 from app.api.tenders import get_tender_or_404
 from app.audit import record_document_loaded
+from app.auth import current_user, require_officer
 from app.config import settings
 from app.db import get_db
 from app.extraction.pdf import InvalidPdf, PdfText, read_pdf
 from app.extraction.rules import SourceDoc
 from app.extraction.service import MODE_LABELS, classify, extract_bid
-from app.models import Bid, Document, Requirement
+from app.models import Bid, Document, Requirement, User
 from app.schemas import BidOut, UploadResultOut
 
-router = APIRouter(prefix="/api/tenders", tags=["uploads"])
+router = APIRouter(
+    prefix="/api/tenders", tags=["uploads"], dependencies=[Depends(current_user)]
+)
 
 MAX_FILES = 20
 MAX_NAME_LENGTH = 120
@@ -88,6 +91,7 @@ def upload_bid(
     bidder_name: str = Form(""),
     files: list[UploadFile] = File(default=[]),
     db: Session = Depends(get_db),
+    _officer: User = Depends(require_officer),
 ):
     tender = get_tender_or_404(tender_id, db)
 

@@ -26,6 +26,9 @@ def load_demo(db: Session, *, reset: bool = False) -> tuple[Tender, list[Bid]]:
     )
 
     if tender and reset:
+        from app.api.uploads import remove_upload_files
+
+        remove_upload_files([d for b in tender.bids for d in b.documents])
         db.delete(tender)  # cascades to requirements, bids, documents, evaluations
         db.commit()
         tender = None

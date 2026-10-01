@@ -11,6 +11,8 @@ from app.schemas import (
     DocumentOut,
     TenderOut,
 )
+from app.extraction.pdf import NO_TEXT_LABEL
+from app.extraction.service import MODE_LABELS
 from app.seed.sample_data import CONTACT_FIELDS
 
 router = APIRouter(prefix="/api/bids", tags=["bids"])
@@ -23,7 +25,17 @@ def get_bid_or_404(bid_id: int, db: Session) -> Bid:
     return bid
 
 
-def _document_out(doc: Document) -> DocumentOut:
+def _text_status(doc: Document) -> str:
+    blank = doc.pages_without_text or []
+    if doc.source != "UPLOAD" or not blank:
+        return ""
+    if len(blank) == doc.page_count:
+        return NO_TEXT_LABEL
+    pages = ", ".join(str(p) for p in blank)
+    return f"Page{'s' if len(blank) > 1 else ''} {pages}: {NO_TEXT_LABEL}"
+
+
+def document_out(doc: Document) -> DocumentOut:
     return DocumentOut(
         id=doc.id,
         original_filename=doc.original_filename,
@@ -34,6 +46,13 @@ def _document_out(doc: Document) -> DocumentOut:
         has_text_layer=doc.has_text_layer,
         extracted_field_count=len(doc.fields or {}),
         sha256=doc.sha256 or "",
+        source=doc.source or "SAMPLE",
+        file_size=doc.file_size or 0,
+        pages_without_text=doc.pages_without_text or [],
+        text_status=_text_status(doc),
+        extraction_mode=doc.extraction_mode or "",
+        extraction_label=MODE_LABELS.get(doc.extraction_mode or "", ""),
+        extraction_note=doc.extraction_note or "",
     )
 
 
@@ -104,6 +123,6 @@ def get_bid_documents(bid_id: int, db: Session = Depends(get_db)):
         bid=BidOut.model_validate(bid),
         tender=TenderOut.model_validate(bid.tender),
         total=len(docs),
-        documents=[_document_out(d) for d in docs],
+        documents=[document_out(d) for d in docs],
         contact=contact_details(docs),
     )

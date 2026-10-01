@@ -27,6 +27,7 @@ class MockProvider:
         prompt: str,
         schema: dict,
         cache_key: str | None = None,
+        system: str | None = None,
     ) -> dict:
         key = cache_key or "default"
         path = FIXTURES_DIR / task / f"{key}.json"

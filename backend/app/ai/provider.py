@@ -20,6 +20,7 @@ class AIProvider(Protocol):
         prompt: str,
         schema: dict,
         cache_key: str | None = None,
+        system: str | None = None,
     ) -> dict:
         """Return a dict that validates against `schema`.
 
@@ -32,6 +33,10 @@ class AIProvider(Protocol):
             schema: JSON schema the response must satisfy.
             cache_key: optional explicit cache key; defaults to a hash
                 of (task, prompt).
+            system: optional system prompt replacing the provider default.
+
+        Raises on any failure (network, refusal, truncated or invalid
+        JSON) so callers can fall back to a deterministic path.
         """
         ...
 

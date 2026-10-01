@@ -9,6 +9,7 @@ import { LoadingState } from '../components/ui/LoadingState'
 import { ErrorState } from '../components/ui/ErrorState'
 import { EmptyState } from '../components/ui/EmptyState'
 import { IconBarChart } from '../components/icons'
+import { EvidenceSource } from '../components/EvidenceSource'
 import { NOT_SPECIFIED, REASON_CATEGORIES, categoryLabel } from '../overrideCategories'
 
 function formatTimestamp(iso: string | null): string {
@@ -325,6 +326,7 @@ export function ReportsPage() {
                         {r.source_document}
                         {r.source_page > 0 && ` · p.${r.source_page}`}
                       </div>
+                      <EvidenceSource result={r} />
                     </>
                   ) : (
                     'No evidence found'

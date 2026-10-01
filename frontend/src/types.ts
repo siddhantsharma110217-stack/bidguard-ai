@@ -1,7 +1,14 @@
+export type ExtractionMode = 'AI' | 'RULES' | 'RULES_FALLBACK'
+
 export interface HealthStatus {
   status: string
   ai_provider: string
   database_url: string
+  /** Absent on backends that predate PDF upload. Never includes the API key. */
+  extraction_mode?: ExtractionMode
+  extraction_label?: string
+  extraction_model?: string
+  max_upload_mb?: number
 }
 
 export type Verdict = 'PASS' | 'REVIEW' | 'FAIL' | 'MISSING'
@@ -62,6 +69,24 @@ export interface BidDocument {
   extracted_field_count: number
   /** SHA-256 fingerprint taken when the document was loaded. */
   sha256: string
+  /** UPLOAD for uploaded PDFs, SAMPLE for seeded demo documents. */
+  source: 'UPLOAD' | 'SAMPLE'
+  file_size: number
+  pages_without_text: number[]
+  /** e.g. "No extractable text — OCR not available"; "" when all pages read. */
+  text_status: string
+  extraction_mode: ExtractionMode | ''
+  extraction_label: string
+  extraction_note: string
+}
+
+export interface UploadResult {
+  bid: Bid
+  tender_id: number
+  extraction_mode: ExtractionMode
+  extraction_label: string
+  extraction_note: string
+  documents: BidDocument[]
 }
 
 export interface Bid {
@@ -114,6 +139,10 @@ export interface EvaluationResult {
   recommended_action: string
   decision_source: string
   rule_trace: Record<string, unknown>
+  /** How the evidence was obtained; '' for pre-extracted demo data. */
+  extraction_method: ExtractionMode | ''
+  /** AI mode only: VERIFIED | UNSUPPORTED | VALUE_NOT_IN_QUOTE */
+  citation_status: string
   /** `verdict` and `score` are effective values; these describe any override. */
   system_verdict: Verdict
   overridden: boolean

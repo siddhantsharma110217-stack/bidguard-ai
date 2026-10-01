@@ -10,6 +10,7 @@ import type {
   HealthStatus,
   OverrideRequest,
   RedFlagReport,
+  UploadResult,
   RequirementList,
   Tender,
 } from '../types'
@@ -28,7 +29,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response
   try {
     res = await fetch(path, {
-      headers: { 'Content-Type': 'application/json' },
+      // FormData bodies set their own multipart Content-Type (with boundary).
+      headers: init?.body instanceof FormData ? undefined : { 'Content-Type': 'application/json' },
       ...init,
     })
   } catch {
@@ -119,4 +121,19 @@ export function verifyAuditChain(): Promise<AuditVerification> {
 
 export function getRedFlags(tenderId: number): Promise<RedFlagReport> {
   return request<RedFlagReport>(`/api/tenders/${tenderId}/red-flags`)
+}
+
+/** Upload a new bid: the bidder's company name plus one or more PDFs. */
+export function uploadBid(
+  tenderId: number,
+  bidderName: string,
+  files: File[],
+): Promise<UploadResult> {
+  const form = new FormData()
+  form.append('bidder_name', bidderName)
+  for (const file of files) form.append('files', file, file.name)
+  return request<UploadResult>(`/api/tenders/${tenderId}/bids/upload`, {
+    method: 'POST',
+    body: form,
+  })
 }

@@ -70,6 +70,14 @@ class DocumentOut(BaseModel):
     has_text_layer: bool
     extracted_field_count: int = 0
     sha256: str = ""
+    # UPLOAD for user-uploaded PDFs, SAMPLE for seeded demo documents.
+    source: str = "SAMPLE"
+    file_size: int = 0
+    pages_without_text: list[int] = []
+    text_status: str = ""  # human-readable, e.g. "No extractable text — OCR not available"
+    extraction_mode: str = ""  # AI | RULES | RULES_FALLBACK | "" (pre-extracted demo data)
+    extraction_label: str = ""
+    extraction_note: str = ""
 
 
 class ContactFieldOut(BaseModel):
@@ -137,6 +145,11 @@ class ResultOut(BaseModel):
     recommended_action: str
     decision_source: str
     rule_trace: dict
+    # How the evidence was obtained: AI | RULES | RULES_FALLBACK, or "" for
+    # the seeded demo data (pre-extracted). citation_status is set in AI mode:
+    # VERIFIED | UNSUPPORTED | VALUE_NOT_IN_QUOTE.
+    extraction_method: str = ""
+    citation_status: str = ""
     # `verdict`/`score` are the effective values; these describe any override.
     system_verdict: str
     overridden: bool = False
@@ -268,3 +281,12 @@ class RedFlagReportOut(BaseModel):
     min_similarity_text_length: int
     total_flags: int
     flags: list[RedFlagOut]
+
+
+class UploadResultOut(BaseModel):
+    bid: BidOut
+    tender_id: int
+    extraction_mode: str
+    extraction_label: str
+    extraction_note: str
+    documents: list[DocumentOut]

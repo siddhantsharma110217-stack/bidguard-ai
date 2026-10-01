@@ -56,7 +56,7 @@ export function TopBar() {
             Backend online
             {health && (
               <span className="text-text-faint">
-                &middot; {health.ai_provider} mode
+                &middot; {health.extraction_label ?? `${health.ai_provider} mode`}
               </span>
             )}
           </Badge>

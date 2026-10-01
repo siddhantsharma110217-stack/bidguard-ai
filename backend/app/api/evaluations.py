@@ -203,6 +203,8 @@ def _load_results(bid_id: int, db: Session) -> EvaluationResultsOut:
                 recommended_action=row.recommended_action,
                 decision_source=row.decision_source,
                 rule_trace=row.rule_trace or {},
+                extraction_method=(row.rule_trace or {}).get("extraction_method", ""),
+                citation_status=(row.rule_trace or {}).get("citation_status", ""),
                 system_verdict=row.verdict,
                 overridden=row.officer_verdict is not None,
                 officer_verdict=row.officer_verdict,

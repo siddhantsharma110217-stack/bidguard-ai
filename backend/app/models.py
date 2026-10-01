@@ -79,6 +79,9 @@ class Requirement(Base):
 
 class Bid(Base):
     __tablename__ = "bids"
+    # Never reuse the id of a deleted bid: audit events refer to bids by id
+    # and outlive them (e.g. across a demo reset).
+    __table_args__ = {"sqlite_autoincrement": True}
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     tender_id: Mapped[int] = mapped_column(ForeignKey("tenders.id"))
@@ -113,6 +116,7 @@ class Bid(Base):
 
 class Document(Base):
     __tablename__ = "documents"
+    __table_args__ = {"sqlite_autoincrement": True}  # see Bid
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     bid_id: Mapped[int] = mapped_column(ForeignKey("bids.id"))
@@ -131,7 +135,19 @@ class Document(Base):
     text_path: Mapped[str] = mapped_column(String, default="")
     fields: Mapped[dict] = mapped_column(JSON, default=dict)
     # SHA-256 fingerprint taken when the document was loaded (see app.audit).
+    # For uploaded files it is computed from the stored file's bytes.
     sha256: Mapped[str] = mapped_column(String, default="")
+
+    # Uploaded PDFs (source == "UPLOAD"); seeded demo documents are "SAMPLE".
+    source: Mapped[str] = mapped_column(String, default="SAMPLE")
+    file_size: Mapped[int] = mapped_column(Integer, default=0)
+    # Text per page, index 0 = page 1, exactly as PyMuPDF extracted it.
+    page_texts: Mapped[list] = mapped_column(JSON, default=list)
+    # Page numbers (1-based) with no extractable text, e.g. scanned images.
+    pages_without_text: Mapped[list] = mapped_column(JSON, default=list)
+    # AI | RULES | RULES_FALLBACK ("" for seeded demo documents)
+    extraction_mode: Mapped[str] = mapped_column(String, default="")
+    extraction_note: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(default=now)
 
     bid: Mapped["Bid"] = relationship(back_populates="documents")

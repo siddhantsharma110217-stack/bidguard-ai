@@ -15,6 +15,12 @@ class Settings(BaseSettings):
     ai_provider: str = "mock"
     anthropic_api_key: str = ""
     ai_model: str = "claude-opus-5"
+    # Model used to extract evidence from uploaded bid PDFs. Extraction runs
+    # in AI mode only when ANTHROPIC_API_KEY is set; otherwise rule-based.
+    extraction_model: str = "claude-sonnet-5-5"
+
+    # Uploaded bid PDFs: per-file size limit.
+    max_upload_mb: int = 10
 
     database_url: str = "sqlite:///./bidguard.db"
     storage_dir: str = "./storage"

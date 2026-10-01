@@ -37,7 +37,15 @@ def get_db():
 # tables, so add them in place on databases created by an older build.
 _LATE_COLUMNS = {
     "audit_events": {"reason_category": "VARCHAR DEFAULT ''"},
-    "documents": {"sha256": "VARCHAR DEFAULT ''"},
+    "documents": {
+        "sha256": "VARCHAR DEFAULT ''",
+        "source": "VARCHAR DEFAULT 'SAMPLE'",
+        "file_size": "INTEGER DEFAULT 0",
+        "page_texts": "JSON DEFAULT '[]'",
+        "pages_without_text": "JSON DEFAULT '[]'",
+        "extraction_mode": "VARCHAR DEFAULT ''",
+        "extraction_note": "TEXT DEFAULT ''",
+    },
     "evaluations": {
         "officer_verdict": "VARCHAR",
         "override_reason": "TEXT DEFAULT ''",

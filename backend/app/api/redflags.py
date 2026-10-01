@@ -29,10 +29,13 @@ router = APIRouter(prefix="/api/tenders", tags=["red-flags"])
 def document_text(doc: Document) -> str:
     """The document's extracted text, without the contact block.
 
-    Uses the stored text layer when one exists; seeded demo documents have
-    none, so their extracted field snippets stand in for it. Contact fields
-    are compared exactly by the shared-contact check instead.
+    Uses the PDF text of uploaded documents, or a stored text layer when one
+    exists; seeded demo documents have neither, so their extracted field
+    snippets stand in for it. Contact fields are compared exactly by the
+    shared-contact check instead.
     """
+    if doc.page_texts:
+        return "\n".join(doc.page_texts)
     if doc.text_path and Path(doc.text_path).is_file():
         return Path(doc.text_path).read_text(encoding="utf-8", errors="ignore")
     return "\n".join(

@@ -10,6 +10,7 @@ import { LoadingState } from '../components/ui/LoadingState'
 import { ErrorState } from '../components/ui/ErrorState'
 import { EmptyState } from '../components/ui/EmptyState'
 import { OverrideForm } from '../components/OverrideForm'
+import { EvidenceSource } from '../components/EvidenceSource'
 import { categoryLabel } from '../overrideCategories'
 import { IconActivity, IconSpinner } from '../components/icons'
 
@@ -150,7 +151,11 @@ export function EvaluationPage() {
                       {r.evidence ? (
                         <>
                           <div className="max-w-xs text-xs text-text">{r.evidence}</div>
-                          <div className="mt-0.5 text-xs text-text-faint">{r.source_document}</div>
+                          <div className="mt-0.5 text-xs text-text-faint">
+                            {r.source_document}
+                            {r.source_page > 0 && ` · p.${r.source_page}`}
+                          </div>
+                          <EvidenceSource result={r} />
                         </>
                       ) : (
                         <span className="text-xs text-text-faint">No evidence found</span>

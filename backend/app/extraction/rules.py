@@ -344,3 +344,120 @@ def extract_field(field: str, docs: list[SourceDoc]) -> tuple[int, dict] | None:
         data["ambiguity_reason"] = problem
         data["confidence"] = 0.5
     return chosen.doc_index, data
+
+
+# ---------------------------------------------------------------------------
+# Bidder contact details (phone, email, registered address, bank account)
+# ---------------------------------------------------------------------------
+#
+# Stored in the same `fields` shape (and under the same keys) as the seeded
+# demo bidders' contact details, so Red Flags compares uploaded bids with
+# every other bidder. They are read only from cover and commercial pages:
+# warranty certificates, OEM letters and the like carry other parties'
+# contact details (the manufacturer's, a bank's), which must not be
+# attributed to the bidder.
+
+CONTACT_PAGE_HINT = re.compile(r"\b(commercial|bidder details|cover(?:ing)?\s*letter|cover)\b", re.I)
+
+EMAIL = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}\b")
+PHONE_LABEL = re.compile(r"\b(phone|mobile|tel(?:ephone)?|contact (?:no|number)|mob)\b", re.I)
+PHONE = re.compile(r"(\+?\d[\d\s\-().]{8,}\d)")
+ADDRESS_LABEL = re.compile(
+    r"\b(?:registered (?:office|address)|regd\.? (?:office|address))\s*[:\-]\s*(.+)$", re.I
+)
+ACCOUNT_LABEL = re.compile(r"\b(a/c|account)\b", re.I)
+ACCOUNT_NUMBER = re.compile(r"\b(\d{9,18})\b")
+IFSC = re.compile(r"\b([A-Z]{4}0[A-Z0-9]{6})\b")
+BANK_NAME = re.compile(r"\bbank(?:\s+name)?\s*[:\-]\s*([A-Za-z .&]+?)(?:,|$)", re.I)
+# "... HDFC Bank, A/c No. ..." : a bank named inline on the account line.
+INLINE_BANK = re.compile(
+    r"\b((?:[A-Z][A-Za-z&.]*\s+){1,3}Bank(?:\s+of\s+[A-Z][a-z]+)?)\b(?=.*\b(?:[Aa]/[Cc]|[Aa]ccount)\b)"
+)
+
+
+# Pages issued by someone other than the bidder (manufacturer, BIS, the OEM
+# granting the warranty): their contact details are not the bidder's.
+THIRD_PARTY_PAGE = re.compile(
+    r"\b(manufacturer'?s?\s+authori[sz]ation|warranty certificate|bureau of indian standards)\b", re.I
+)
+
+
+def is_contact_page(doc_index: int, filename: str, page_number: int, text: str) -> bool:
+    """The bidder's cover page (page 1 of the first document, or of a file
+    named as a cover letter) or a commercial / bidder-details page."""
+    # Judge a page by its heading, so a cover letter's index ("Annexure C:
+    # Warranty certificate") does not disqualify the cover letter itself.
+    heading = "\n".join([line for line in text.splitlines() if line.strip()][:2])
+    if THIRD_PARTY_PAGE.search(heading):
+        return False
+    if CONTACT_PAGE_HINT.search(text) or CONTACT_PAGE_HINT.search(filename.replace("_", " ")):
+        return True
+    return doc_index == 0 and page_number == 1
+
+
+def _phone(line: str) -> str | None:
+    if not PHONE_LABEL.search(line):
+        return None
+    for m in PHONE.findall(line):
+        if len(re.sub(r"\D", "", m)) >= 10:
+            return _clean(m)
+    return None
+
+
+def _contact_entry(value: str, page: int, line: str, **extra) -> dict:
+    return {
+        "value": value,
+        "page": page,
+        "confidence": CLEAN_SINGLE_CONFIDENCE,
+        "snippet": line,
+        "extraction_method": "RULES",
+        **extra,
+    }
+
+
+def extract_contacts(docs: list[SourceDoc]) -> dict[str, tuple[int, dict]]:
+    """Contact fields -> (document index, field data), first occurrence wins."""
+    found: dict[str, tuple[int, dict]] = {}
+
+    def keep(field: str, d_idx: int, data: dict) -> None:
+        found.setdefault(field, (d_idx, data))
+
+    for d_idx, doc in enumerate(docs):
+        for p_idx, text in enumerate(doc.pages):
+            page = p_idx + 1
+            if not is_contact_page(d_idx, doc.filename, page, text):
+                continue
+            lines = [_clean(raw) for raw in text.splitlines() if raw.strip()]
+            page_ifsc = next((m.group(1) for line in lines for m in [IFSC.search(line)] if m), None)
+            page_bank = next(
+                (m.group(1).strip() for line in lines for m in [BANK_NAME.search(line)] if m), None
+            )
+            for line in lines:
+                email = EMAIL.search(line)
+                if email:
+                    keep("bidder_email", d_idx, _contact_entry(email.group(0), page, line))
+                phone = _phone(line)
+                if phone:
+                    keep("bidder_phone", d_idx, _contact_entry(phone, page, line))
+                address = ADDRESS_LABEL.search(line)
+                if address:
+                    keep("bidder_address", d_idx, _contact_entry(_clean(address.group(1)), page, line))
+                if ACCOUNT_LABEL.search(line):
+                    number = ACCOUNT_NUMBER.search(line)
+                    if number:
+                        ifsc = IFSC.search(line)
+                        ifsc_code = ifsc.group(1) if ifsc else page_ifsc
+                        inline = INLINE_BANK.search(line)
+                        bank = page_bank or (inline.group(1) if inline else None)
+                        parts = [p for p in (bank, f"A/c No. {number.group(1)}") if p]
+                        if ifsc_code:
+                            parts.append(f"IFSC {ifsc_code}")
+                        keep(
+                            "bank_account",
+                            d_idx,
+                            _contact_entry(
+                                ", ".join(parts), page, line,
+                                account_number=number.group(1), ifsc=ifsc_code or "",
+                            ),
+                        )
+    return found

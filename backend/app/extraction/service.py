@@ -115,6 +115,11 @@ def extract_bid(requirements: list, docs: list[SourceDoc], provider="auto") -> E
             if result.mode == "RULES_FALLBACK":
                 data = {**data, "extraction_method": "RULES_FALLBACK"}
             result.fields[name] = (d_idx, data)
+
+    # Contact details are always read with deterministic patterns (in AI
+    # mode too): they feed Red Flags, not verdicts.
+    for name, hit in rules.extract_contacts(docs).items():
+        result.fields.setdefault(name, hit)
     return result
 
 

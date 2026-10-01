@@ -5,7 +5,7 @@ import type { EvaluationResults, OverrideRequest } from '../types'
 import { useDemo } from './DemoContext'
 
 /**
- * Single source of truth for the current bid's evaluation result.
+ * Single source of truth for the selected bid's evaluation result.
  *
  * The Evaluation, Compliance and Reports pages all read from here, so they
  * can never disagree with each other or drift out of sync. Nothing in this
@@ -32,10 +32,11 @@ interface EvaluationContextValue {
 const EvaluationContext = createContext<EvaluationContextValue | null>(null)
 
 export function EvaluationProvider({ children }: { children: ReactNode }) {
-  const { dashboard, refresh: refreshDashboard } = useDemo()
-  const bidId = dashboard?.demo_bid_id ?? null
+  const { selectedBidId: bidId, refresh: refreshDashboard } = useDemo()
 
-  const [results, setResults] = useState<EvaluationResults | null>(null)
+  const [fetched, setFetched] = useState<EvaluationResults | null>(null)
+  // The bid whose results `fetched` reflects (a 404 leaves `fetched` null).
+  const [fetchedFor, setFetchedFor] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [running, setRunning] = useState(false)
@@ -46,7 +47,7 @@ export function EvaluationProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (bidId == null) {
-      setResults(null)
+      setFetched(null)
       setLoading(false)
       setError(null)
       return
@@ -58,18 +59,20 @@ export function EvaluationProvider({ children }: { children: ReactNode }) {
 
     getEvaluationResults(bidId)
       .then((r) => {
-        if (!cancelled) setResults(r)
+        if (!cancelled) setFetched(r)
       })
       .catch((err: unknown) => {
         if (cancelled) return
         if (err instanceof ApiError && err.status === 404) {
-          setResults(null) // not evaluated yet — a valid state, not a failure
+          setFetched(null) // not evaluated yet — a valid state, not a failure
         } else {
           setError(err instanceof ApiError ? err.message : 'Something went wrong.')
         }
       })
       .finally(() => {
-        if (!cancelled) setLoading(false)
+        if (cancelled) return
+        setFetchedFor(bidId)
+        setLoading(false)
       })
 
     return () => {
@@ -77,13 +80,19 @@ export function EvaluationProvider({ children }: { children: ReactNode }) {
     }
   }, [bidId, tick])
 
+  // Right after the officer switches bidder, `fetched` still holds the
+  // previous bid's results until the effect above re-fetches. Never expose
+  // one bidder's verdicts under another bidder's name.
+  const results = fetched && fetched.bid.id === bidId ? fetched : null
+  const stale = bidId != null && fetchedFor !== bidId
+
   const run = useCallback(async () => {
     if (bidId == null) return
     setRunning(true)
     setRunError(null)
     try {
       const r = await runEvaluation(bidId)
-      setResults(r)
+      setFetched(r)
       // Dashboard tiles (bids evaluated, avg compliance, high-risk) derive from
       // evaluation state, so they must be re-read after a run completes.
       await refreshDashboard()
@@ -98,7 +107,7 @@ export function EvaluationProvider({ children }: { children: ReactNode }) {
     async (payload: OverrideRequest) => {
       if (bidId == null) return
       const r = await createOverride(bidId, payload)
-      setResults(r)
+      setFetched(r)
       // Overrides change the bid's scores, which the dashboard tiles read.
       await refreshDashboard()
     },
@@ -109,7 +118,7 @@ export function EvaluationProvider({ children }: { children: ReactNode }) {
     <EvaluationContext.Provider
       value={{
         results,
-        loading,
+        loading: loading || stale,
         error,
         running,
         runError,

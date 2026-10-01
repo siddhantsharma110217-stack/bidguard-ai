@@ -72,6 +72,17 @@ class DocumentOut(BaseModel):
     sha256: str = ""
 
 
+class ContactFieldOut(BaseModel):
+    """One bidder contact detail, with the document it was extracted from."""
+
+    field: str
+    label: str
+    value: str
+    source_document: str
+    source_document_id: int
+    source_page: int
+
+
 class BidOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -96,6 +107,7 @@ class BidDocumentsOut(BaseModel):
     tender: TenderOut
     total: int
     documents: list[DocumentOut]
+    contact: list[ContactFieldOut] = []
 
 
 class BidCreate(BaseModel):
@@ -173,6 +185,7 @@ class DashboardOut(BaseModel):
     demo_loaded: bool
     demo_tender_id: int | None
     demo_bid_id: int | None
+    demo_bid_ids: list[int] = []
 
 
 class AuditEventOut(BaseModel):

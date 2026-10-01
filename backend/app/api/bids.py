@@ -3,7 +3,15 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.models import Bid, Document, Tender
-from app.schemas import BidCreate, BidDocumentsOut, BidOut, DocumentOut, TenderOut
+from app.schemas import (
+    BidCreate,
+    BidDocumentsOut,
+    BidOut,
+    ContactFieldOut,
+    DocumentOut,
+    TenderOut,
+)
+from app.seed.sample_data import CONTACT_FIELDS
 
 router = APIRouter(prefix="/api/bids", tags=["bids"])
 
@@ -29,9 +37,37 @@ def _document_out(doc: Document) -> DocumentOut:
     )
 
 
+def _contact_out(docs: list[Document]) -> list[ContactFieldOut]:
+    """Bidder contact details, each taken from the first document supplying it.
+
+    Documents are searched in id order, matching how the evaluator resolves
+    fields, so the result is stable.
+    """
+    contact: list[ContactFieldOut] = []
+    for field, label in CONTACT_FIELDS.items():
+        for doc in docs:
+            data = (doc.fields or {}).get(field)
+            if data and data.get("value"):
+                contact.append(
+                    ContactFieldOut(
+                        field=field,
+                        label=label,
+                        value=str(data["value"]),
+                        source_document=doc.original_filename,
+                        source_document_id=doc.id,
+                        source_page=int(data.get("page", 0)),
+                    )
+                )
+                break
+    return contact
+
+
 @router.get("", response_model=list[BidOut])
-def list_bids(db: Session = Depends(get_db)):
-    return db.query(Bid).order_by(Bid.id).all()
+def list_bids(tender_id: int | None = None, db: Session = Depends(get_db)):
+    query = db.query(Bid)
+    if tender_id is not None:
+        query = query.filter(Bid.tender_id == tender_id)
+    return query.order_by(Bid.id).all()
 
 
 @router.post("", response_model=BidOut, status_code=201)
@@ -69,4 +105,5 @@ def get_bid_documents(bid_id: int, db: Session = Depends(get_db)):
         tender=TenderOut.model_validate(bid.tender),
         total=len(docs),
         documents=[_document_out(d) for d in docs],
+        contact=_contact_out(docs),
     )

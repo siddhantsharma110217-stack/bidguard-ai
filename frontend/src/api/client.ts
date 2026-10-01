@@ -73,10 +73,10 @@ export function getRequirements(tenderId: number): Promise<RequirementList> {
   return request<RequirementList>(`/api/tenders/${tenderId}/requirements`)
 }
 
-/** All bids. Callers filter by `tender_id`; this is the seam a future bid
- *  selector will hang off. */
-export function listBids(): Promise<Bid[]> {
-  return request<Bid[]>('/api/bids')
+/** All bids, or only those submitted against `tenderId`. */
+export function listBids(tenderId?: number): Promise<Bid[]> {
+  const query = tenderId == null ? '' : `?tender_id=${tenderId}`
+  return request<Bid[]>(`/api/bids${query}`)
 }
 
 export function getBid(bidId: number): Promise<Bid> {

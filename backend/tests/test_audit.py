@@ -10,6 +10,7 @@ from app.audit import GENESIS_HASH, compute_event_hash, fingerprint_document
 from app.db import engine
 from app.main import app
 from app.models import AuditEvent, Document
+from app.seed import sample_data
 
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 REASON = "Original BIS certificate inspected in person; it is valid."
@@ -298,5 +299,131 @@ def test_audit_log_survives_demo_reset(client, demo):
     count = len(client.get("/api/audit/events").json())
     client.post("/api/demo/load", params={"reset": True})
     events = client.get("/api/audit/events").json()
-    assert len(events) == count + 4  # four new DOCUMENT_LOADED events
+    total_docs = sum(len(b["documents"]) for b in sample_data.BIDDERS)
+    assert len(events) == count + total_docs  # one DOCUMENT_LOADED per document
+    assert client.post("/api/audit/verify").json()["intact"] is True
+
+
+# ---------- all four demo bidders ----------
+
+BIDDER_NAMES = [b["bidder_name"] for b in sample_data.BIDDERS]
+
+
+@pytest.fixture()
+def all_bids(client):
+    """Fresh demo with every bidder evaluated; bidder name -> evaluation results."""
+    loaded = client.post("/api/demo/load", params={"reset": True}).json()
+    assert [b["bidder_name"] for b in loaded["bids"]] == BIDDER_NAMES
+    out = {}
+    for bid in loaded["bids"]:
+        resp = client.post("/api/evaluations", json={"bid_id": bid["id"]})
+        assert resp.status_code == 201, resp.text
+        out[bid["bidder_name"]] = resp.json()
+    return out
+
+
+def test_every_bidders_documents_are_fingerprinted_and_logged(client, all_bids):
+    events = client.get("/api/audit/events").json()
+    seen_hashes = set()
+    for name, results in all_bids.items():
+        bid_id = results["bid"]["id"]
+        docs = client.get(f"/api/bids/{bid_id}/documents").json()["documents"]
+        expected = next(b for b in sample_data.BIDDERS if b["bidder_name"] == name)
+        assert len(docs) == len(expected["documents"])
+
+        logged = {
+            e["document_id"]: e
+            for e in events
+            if e["event_type"] == "DOCUMENT_LOADED" and e["bid_id"] == bid_id
+        }
+        assert set(logged) == {d["id"] for d in docs}, name
+        for d in docs:
+            assert SHA256_RE.match(d["sha256"]), (name, d["original_filename"])
+            e = logged[d["id"]]
+            assert e["bidder_name"] == name
+            assert e["document_name"] == d["original_filename"]
+            assert e["document_sha256"] == d["sha256"]
+            seen_hashes.add(d["sha256"])
+
+    # Bidders submit same-named files (e.g. Technical_Bid.pdf); their
+    # fingerprints must still differ because the contents differ.
+    total = sum(len(b["documents"]) for b in sample_data.BIDDERS)
+    assert len(seen_hashes) == total
+
+
+@pytest.mark.parametrize("name", BIDDER_NAMES)
+def test_override_and_audit_for_each_bidder(client, all_bids, name):
+    results = all_bids[name]
+    bid_id = results["bid"]["id"]
+    target = results["results"][0]
+    new_verdict = "FAIL" if target["verdict"] != "FAIL" else "PASS"
+
+    resp = client.post(
+        f"/api/evaluations/{bid_id}/overrides",
+        json={
+            "requirement_id": target["requirement_id"],
+            "verdict": new_verdict,
+            "reason": REASON,
+            "officer_name": "A. Sharma",
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    assert body["bid"]["bidder_name"] == name
+    r = next(x for x in body["results"] if x["requirement_id"] == target["requirement_id"])
+    assert (r["system_verdict"], r["verdict"], r["overridden"]) == (
+        target["verdict"], new_verdict, True,
+    )
+
+    event = client.get("/api/audit/events").json()[-1]
+    assert event["event_type"] == "VERDICT_OVERRIDE"
+    assert event["bid_id"] == bid_id
+    assert event["bidder_name"] == name
+    assert event["requirement_code"] == target["requirement_code"]
+    assert event["system_verdict"] == target["verdict"]
+    assert event["officer_verdict"] == new_verdict
+
+    # Other bidders are untouched.
+    for other, other_results in all_bids.items():
+        if other == name:
+            continue
+        now = client.get(f"/api/evaluations/{other_results['bid']['id']}/results").json()
+        assert now["summary"] == other_results["summary"], other
+        assert not any(x["overridden"] for x in now["results"])
+
+    assert client.post("/api/audit/verify").json()["intact"] is True
+
+
+def test_overrides_across_all_bidders_form_one_verifiable_chain(client, all_bids, db):
+    for results in all_bids.values():
+        target = results["results"][1]
+        resp = client.post(
+            f"/api/evaluations/{results['bid']['id']}/overrides",
+            json={
+                "requirement_id": target["requirement_id"],
+                "verdict": "REVIEW" if target["verdict"] != "REVIEW" else "PASS",
+                "reason": REASON,
+                "officer_name": "R. Iyer",
+            },
+        )
+        assert resp.status_code == 201, resp.text
+
+    events = client.get("/api/audit/events").json()
+    overrides = [e for e in events if e["event_type"] == "VERDICT_OVERRIDE"][-4:]
+    assert [e["bidder_name"] for e in overrides] == BIDDER_NAMES
+    assert client.post("/api/audit/verify").json()["intact"] is True
+
+    # Tampering with one bidder's override is pinpointed.
+    target = overrides[2]
+    with engine.begin() as conn:
+        conn.execute(
+            text("UPDATE audit_events SET bidder_name = 'Someone Else' WHERE id = :id"),
+            {"id": target["id"]},
+        )
+    try:
+        body = client.post("/api/audit/verify").json()
+        assert body["intact"] is False
+        assert body["first_broken"]["id"] == target["id"]
+    finally:
+        _restore(db, target["id"], bidder_name=target["bidder_name"])
     assert client.post("/api/audit/verify").json()["intact"] is True

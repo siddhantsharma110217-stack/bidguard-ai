@@ -41,6 +41,11 @@ def load_demo(db: Session, *, reset: bool = False) -> tuple[Tender, list[Bid]]:
         for spec in sample_data.REQUIREMENTS:
             db.add(Requirement(tender_id=tender.id, **spec))
         db.flush()
+    else:
+        # A tender loaded by an older build predates `verification_required`.
+        flags = {s["code"]: s.get("verification_required", False) for s in sample_data.REQUIREMENTS}
+        for req in tender.requirements:
+            req.verification_required = flags.get(req.code, False)
 
     bids: list[Bid] = []
     for bidder in sample_data.BIDDERS:
@@ -59,6 +64,8 @@ def load_demo(db: Session, *, reset: bool = False) -> tuple[Tender, list[Bid]]:
                 db.add(doc)
                 db.flush()
                 record_document_loaded(db, doc, bid.bidder_name)
+        else:
+            _refresh_demo_documents(db, bid, bidder["documents"])
         bids.append(bid)
 
     db.commit()
@@ -66,3 +73,24 @@ def load_demo(db: Session, *, reset: bool = False) -> tuple[Tender, list[Bid]]:
     for bid in bids:
         db.refresh(bid)
     return tender, bids
+
+
+def _refresh_demo_documents(db: Session, bid: Bid, specs: list[dict]) -> None:
+    """Bring a demo bid loaded by an older build up to date with the sample
+    data. A changed document is re-fingerprinted and logged as loaded again,
+    so the audit log shows when its contents changed. Unchanged documents
+    (the normal case) are left alone and log nothing."""
+    by_name = {d.original_filename: d for d in bid.documents}
+    for spec in specs:
+        doc = by_name.get(spec["original_filename"])
+        if doc is None:
+            doc = Document(bid_id=bid.id, **spec)
+            db.add(doc)
+            db.flush()
+            record_document_loaded(db, doc, bid.bidder_name)
+            continue
+        if any(getattr(doc, key) != value for key, value in spec.items()):
+            for key, value in spec.items():
+                setattr(doc, key, value)
+            db.flush()
+            record_document_loaded(db, doc, bid.bidder_name)

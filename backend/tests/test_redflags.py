@@ -279,7 +279,13 @@ def test_demo_sample_data_shares_exactly_phone_and_bank_between_apex_and_crestli
 def test_override_creates_and_resolves_inconsistent_treatment(client, demo):
     for bid_id in demo["by_name"].values():
         assert client.post("/api/evaluations", json={"bid_id": bid_id}).status_code == 201
-    assert _flags(client, demo)["total_flags"] == 2  # evaluating alone adds nothing
+    # Evaluating adds no inconsistent-treatment flag; the only new flag is
+    # Apex's certificate verification mismatch (was 2 flags in total).
+    after_eval = _flags(client, demo)
+    assert after_eval["total_flags"] == 3
+    assert [f["kind"] for f in after_eval["flags"] if f["category"] != "POSSIBLE_COLLUSION"] == [
+        "VERIFICATION_MISMATCH"
+    ]
 
     req_008 = next(
         r["requirement_id"]

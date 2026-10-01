@@ -192,6 +192,7 @@ PROTECTED = [
     ("POST", "/api/bids"),
     ("GET", "/api/bids/1"),
     ("GET", "/api/bids/1/documents"),
+    ("POST", "/api/bids/1/documents/1/reverify"),
     ("POST", "/api/evaluations"),
     ("GET", "/api/evaluations/1"),
     ("GET", "/api/evaluations/1/results"),
@@ -222,7 +223,7 @@ def test_every_api_route_is_covered_by_the_protection_test():
         if path.startswith("/api")
         for method in ops
     }
-    normalised = {(m, p.replace("{tender_id}", "1").replace("{bid_id}", "1")) for m, p in routes}
+    normalised = {(m, p.replace("{tender_id}", "1").replace("{bid_id}", "1").replace("{document_id}", "1")) for m, p in routes}
     assert normalised - public == set(PROTECTED)
 
 

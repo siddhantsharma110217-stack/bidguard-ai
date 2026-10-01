@@ -10,6 +10,7 @@ import { ErrorState } from '../components/ui/ErrorState'
 import { EmptyState } from '../components/ui/EmptyState'
 import { IconLock, IconSpinner } from '../components/icons'
 import { categoryLabel } from '../overrideCategories'
+import { VERIFICATION_LABEL } from '../verification'
 
 function formatTimestamp(iso: string): string {
   const d = new Date(iso)
@@ -40,6 +41,28 @@ function EventDetail({ event }: { event: AuditEvent }) {
       </>
     )
   }
+  if (event.event_type === 'DOCUMENT_VERIFICATION' || event.event_type === 'FILE_REVERIFIED') {
+    return (
+      <>
+        <div className="font-medium text-text">
+          {event.document_name}
+          {event.requirement_code && (
+            <span className="font-normal text-text-muted"> · {event.requirement_code}</span>
+          )}
+        </div>
+        <div className="mt-1 text-xs">
+          <span className="font-medium text-text">{CHECK_LABEL[event.check_status] ?? event.check_status}</span>
+          <span className="text-text-faint"> · {event.check_source}</span>
+        </div>
+        <p className="mt-0.5 max-w-md text-xs text-text-muted">{event.reason}</p>
+        {event.event_type === 'FILE_REVERIFIED' && event.document_sha256 && (
+          <div className="mt-0.5 font-mono text-[11px] break-all text-text-faint">
+            Current SHA-256 {event.document_sha256}
+          </div>
+        )}
+      </>
+    )
+  }
   return (
     <>
       <div className="font-medium text-text">{event.document_name}</div>
@@ -48,6 +71,20 @@ function EventDetail({ event }: { event: AuditEvent }) {
       </div>
     </>
   )
+}
+
+const EVENT_LABEL: Record<string, string> = {
+  VERDICT_OVERRIDE: 'Verdict override',
+  DOCUMENT_LOADED: 'Document loaded',
+  DOCUMENT_VERIFICATION: 'Verification check',
+  FILE_REVERIFIED: 'File re-verified',
+}
+
+const CHECK_LABEL: Record<string, string> = {
+  ...VERIFICATION_LABEL,
+  UNCHANGED: 'Unchanged since upload',
+  CHANGED: 'FILE CHANGED SINCE UPLOAD',
+  FILE_MISSING: 'Stored file is missing',
 }
 
 export function AuditPage() {
@@ -155,7 +192,7 @@ export function AuditPage() {
                     {formatTimestamp(e.timestamp)}
                   </td>
                   <td className="px-4 py-3 text-xs font-medium text-text">
-                    {e.event_type === 'VERDICT_OVERRIDE' ? 'Verdict override' : 'Document loaded'}
+                    {EVENT_LABEL[e.event_type] ?? e.event_type}
                   </td>
                   <td className="px-4 py-3 text-xs text-text-muted">{e.bidder_name || '—'}</td>
                   <td className="px-4 py-3">

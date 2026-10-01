@@ -11,6 +11,8 @@ import { ErrorState } from '../components/ui/ErrorState'
 import { EmptyState } from '../components/ui/EmptyState'
 import { IconFolder, IconScanLine, IconAlertTriangle } from '../components/icons'
 import { UploadBidPanel } from '../components/UploadBidPanel'
+import { DocumentTrustCell } from '../components/DocumentTrustCell'
+import { TRUST_HELP } from '../verification'
 import { useAuth } from '../context/auth'
 import { formatBytes } from '../extraction'
 
@@ -102,6 +104,7 @@ export function DocumentsPage() {
           </Card>
         )}
 
+        <p className="text-xs text-text-faint">{TRUST_HELP}</p>
         <Card className="overflow-x-auto">
           <table className="w-full min-w-[1100px] text-sm">
             <thead>
@@ -114,7 +117,7 @@ export function DocumentsPage() {
                 <th className="px-4 py-3">Text Layer</th>
                 <th className="px-4 py-3">Extraction</th>
                 <th className="px-4 py-3">Fields Extracted</th>
-                <th className="px-4 py-3">SHA-256 Fingerprint</th>
+                <th className="w-[15rem] px-4 py-3">Integrity &amp; Verification</th>
               </tr>
             </thead>
             <tbody>
@@ -156,8 +159,8 @@ export function DocumentsPage() {
                     )}
                   </td>
                   <td className="px-4 py-3 text-text-muted tabular-nums">{doc.extracted_field_count}</td>
-                  <td className="px-4 py-3 font-mono text-[11px] text-text-faint" title={doc.sha256}>
-                    {doc.sha256 ? `${doc.sha256.slice(0, 16)}…` : 'Not recorded'}
+                  <td className="px-4 py-3 align-top">
+                    <DocumentTrustCell bidId={data.bid.id} doc={doc} canReverify={isOfficer} />
                   </td>
                 </tr>
               ))}

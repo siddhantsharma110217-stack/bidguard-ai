@@ -47,7 +47,10 @@ _LATE_COLUMNS = {
     "audit_events": {
         "reason_category": "VARCHAR DEFAULT ''",
         "officer_username": "VARCHAR DEFAULT ''",
+        "check_status": "VARCHAR DEFAULT ''",
+        "check_source": "VARCHAR DEFAULT ''",
     },
+    "requirements": {"verification_required": "BOOLEAN DEFAULT 0"},
     "documents": {
         "sha256": "VARCHAR DEFAULT ''",
         "source": "VARCHAR DEFAULT 'SAMPLE'",
@@ -56,6 +59,9 @@ _LATE_COLUMNS = {
         "pages_without_text": "JSON DEFAULT '[]'",
         "extraction_mode": "VARCHAR DEFAULT ''",
         "extraction_note": "TEXT DEFAULT ''",
+        "has_signature_field": "BOOLEAN",
+        "last_reverify_status": "VARCHAR DEFAULT ''",
+        "last_reverified_at": "DATETIME",
     },
     "evaluations": {
         "officer_verdict": "VARCHAR",
@@ -64,6 +70,12 @@ _LATE_COLUMNS = {
         "officer_username": "VARCHAR DEFAULT ''",
         "officer_name": "VARCHAR DEFAULT ''",
         "overridden_at": "DATETIME",
+        "verification_status": "VARCHAR DEFAULT 'NOT_APPLICABLE'",
+        "verification_reason": "TEXT DEFAULT ''",
+        "verification_source": "VARCHAR DEFAULT ''",
+        "verification_checked_at": "VARCHAR DEFAULT ''",
+        "verification_document_id": "INTEGER",
+        "verification_details": "JSON DEFAULT '{}'",
     },
 }
 

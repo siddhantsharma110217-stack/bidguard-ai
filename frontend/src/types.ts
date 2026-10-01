@@ -78,6 +78,14 @@ export interface BidDocument {
   extraction_mode: ExtractionMode | ''
   extraction_label: string
   extraction_note: string
+  /** null = not checked (seeded documents). The signature is never validated. */
+  has_signature_field: boolean | null
+  reverifiable: boolean
+  last_reverify_status: FileCheckStatus | ''
+  last_reverified_at: string | null
+  /** From the latest evaluation; '' when this document was not checked. */
+  verification_status: VerificationStatus | ''
+  verification_reason: string
 }
 
 export interface UploadResult {
@@ -152,11 +160,58 @@ export interface EvaluationResult {
   override_category: string
   officer_name: string
   officer_username: string
+  /** Document trust layer, separate from the compliance verdict. */
+  verification_required: boolean
+  verification_status: VerificationStatus
+  verification_reason: string
+  verification_source: string
+  verification_checked_at: string
+  verification_details: VerificationDetails
+  /** The rule engine's verdict before verification (equals `system_verdict`
+   *  unless verification turned a PASS into REVIEW). */
+  rule_verdict: Verdict
   overridden_at: string | null
 }
 
 /** The officer is always the logged-in user; the backend takes the name
  *  from the session, so the request carries none. */
+export type VerificationStatus =
+  | 'VERIFIED'
+  | 'UNVERIFIED'
+  | 'VERIFICATION_FAILED'
+  | 'NOT_APPLICABLE'
+
+export interface FieldCheck {
+  field: string
+  label: string
+  submitted: string
+  issuer: string
+}
+
+export interface VerificationDetails {
+  matched?: FieldCheck[]
+  mismatched?: FieldCheck[]
+  issuer_record?: Record<string, string> | null
+  submitted?: {
+    certificate_number: string
+    holder: string
+    holder_source: string
+    document_name: string
+    page: number
+  } | null
+}
+
+export type FileCheckStatus = 'UNCHANGED' | 'CHANGED' | 'FILE_MISSING'
+
+export interface ReverifyResult {
+  document_id: number
+  status: FileCheckStatus
+  label: string
+  recorded_sha256: string
+  current_sha256: string
+  checked_at: string
+}
+
 export interface OverrideRequest {
   requirement_id: number
   verdict: Verdict
@@ -231,7 +286,11 @@ export interface Dashboard {
   demo_bid_ids: number[]
 }
 
-export type AuditEventType = 'VERDICT_OVERRIDE' | 'DOCUMENT_LOADED'
+export type AuditEventType =
+  | 'VERDICT_OVERRIDE'
+  | 'DOCUMENT_LOADED'
+  | 'DOCUMENT_VERIFICATION'
+  | 'FILE_REVERIFIED'
 
 export interface AuditEvent {
   id: number
@@ -249,6 +308,9 @@ export interface AuditEvent {
   officer_name: string
   /** '' on events recorded before officer login existed. */
   officer_username: string
+  /** Verification checks only: the outcome and the source consulted. */
+  check_status: string
+  check_source: string
   document_id: number | null
   document_name: string
   document_sha256: string
@@ -269,8 +331,17 @@ export interface ApiErrorBody {
   detail?: string
 }
 
-export type RedFlagKind = 'SHARED_CONTACT' | 'SIMILAR_DOCUMENTS' | 'INCONSISTENT_TREATMENT'
-export type RedFlagCategory = 'POSSIBLE_COLLUSION' | 'INCONSISTENT_TREATMENT'
+export type RedFlagKind =
+  | 'SHARED_CONTACT'
+  | 'SIMILAR_DOCUMENTS'
+  | 'DUPLICATE_FILE'
+  | 'DUPLICATE_CERTIFICATE'
+  | 'INCONSISTENT_TREATMENT'
+  | 'VERIFICATION_MISMATCH'
+export type RedFlagCategory =
+  | 'POSSIBLE_COLLUSION'
+  | 'INCONSISTENT_TREATMENT'
+  | 'DOCUMENT_VERIFICATION'
 
 export interface RedFlagEvidence {
   bid_id: number

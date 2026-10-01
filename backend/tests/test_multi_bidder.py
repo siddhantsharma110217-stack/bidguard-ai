@@ -229,8 +229,12 @@ def evaluations(client, bid_ids) -> dict[str, dict]:
     "name, counts, compliance, risk, band, gate",
     [
         (TECHNOVA, (7, 1, 1, 1), 76.0, 53.0, "HIGH", "NON_RESPONSIVE"),
-        (APEX, (9, 0, 1, 0), 90.0, 25.0, "MEDIUM", "NON_RESPONSIVE"),
-        (BHARAT, (10, 0, 0, 0), 100.0, 0.0, "LOW", "RESPONSIVE"),
+        # BIS (REQ-007) passes the rule for Apex and Bharat, but issuer
+        # verification turns it into REVIEW: Apex's certificate number does
+        # not match the issuer record (was 9/0/1/0, 90.0, risk 25), Bharat's
+        # has no issuer record (was 10/0/0/0, 100.0, risk 0).
+        (APEX, (8, 1, 1, 0), 86.0, 33.0, "MEDIUM", "NON_RESPONSIVE"),
+        (BHARAT, (9, 1, 0, 0), 96.0, 8.0, "LOW", "RESPONSIVE"),
         (CRESTLINE, (9, 0, 0, 1), 90.0, 20.0, "LOW", "RESPONSIVE"),
     ],
 )

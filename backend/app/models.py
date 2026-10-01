@@ -68,6 +68,8 @@ class Requirement(Base):
     source_clause: Mapped[str] = mapped_column(Text, default="")
 
     is_human_edited: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Check the evidence document against the issuer's record (app.verification).
+    verification_required: Mapped[bool] = mapped_column(Boolean, default=False)
 
     tender: Mapped["Tender"] = relationship(back_populates="requirements")
     evaluations: Mapped[list["Evaluation"]] = relationship(
@@ -148,6 +150,12 @@ class Document(Base):
     # AI | RULES | RULES_FALLBACK ("" for seeded demo documents)
     extraction_mode: Mapped[str] = mapped_column(String, default="")
     extraction_note: Mapped[str] = mapped_column(Text, default="")
+    # Uploaded PDFs: whether a digital signature field is present (None for
+    # seeded documents). The signature itself is NOT validated.
+    has_signature_field: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    # Latest "Re-verify file" result: UNCHANGED | CHANGED | FILE_MISSING
+    last_reverify_status: Mapped[str] = mapped_column(String, default="")
+    last_reverified_at: Mapped[datetime | None] = mapped_column(nullable=True)
     created_at: Mapped[datetime] = mapped_column(default=now)
 
     bid: Mapped["Bid"] = relationship(back_populates="documents")
@@ -187,6 +195,16 @@ class Evaluation(Base):
     officer_name: Mapped[str] = mapped_column(String, default="")
     officer_username: Mapped[str] = mapped_column(String, default="")
     overridden_at: Mapped[datetime | None] = mapped_column(nullable=True)
+
+    # Document trust layer, separate from the compliance verdict above.
+    # VERIFIED | UNVERIFIED | VERIFICATION_FAILED | NOT_APPLICABLE
+    verification_status: Mapped[str] = mapped_column(String, default="NOT_APPLICABLE")
+    verification_reason: Mapped[str] = mapped_column(Text, default="")
+    verification_source: Mapped[str] = mapped_column(String, default="")
+    verification_checked_at: Mapped[str] = mapped_column(String, default="")
+    verification_document_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # {"matched": [...], "mismatched": [...], "issuer_record": {...}, "submitted": {...}}
+    verification_details: Mapped[dict] = mapped_column(JSON, default=dict)
 
     bid: Mapped["Bid"] = relationship(back_populates="evaluations")
     requirement: Mapped["Requirement"] = relationship(back_populates="evaluations")
@@ -285,6 +303,11 @@ class AuditEvent(Base):
     # Login of the officer who made the change ("" on events recorded
     # before officer login existed).
     officer_username: Mapped[str] = mapped_column(String, default="")
+    # Verification checks: the outcome (VERIFIED / UNVERIFIED /
+    # VERIFICATION_FAILED, or UNCHANGED / CHANGED / FILE_MISSING for a file
+    # re-check) and the source that was consulted. "" on other events.
+    check_status: Mapped[str] = mapped_column(String, default="")
+    check_source: Mapped[str] = mapped_column(String, default="")
 
     document_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     document_name: Mapped[str] = mapped_column(String, default="")

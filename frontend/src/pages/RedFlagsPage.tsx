@@ -14,6 +14,7 @@ const TITLE = 'Red Flags'
 
 const CATEGORY_LABEL: Record<RedFlagCategory, string> = {
   POSSIBLE_COLLUSION: 'Possible collusion',
+  DOCUMENT_VERIFICATION: 'Document verification',
   INCONSISTENT_TREATMENT: 'Inconsistent treatment',
 }
 
@@ -126,6 +127,7 @@ export function RedFlagsPage() {
   const unevaluated = data.bidders.filter((b) => !b.evaluated)
   const collusion = data.flags.filter((f) => f.category === 'POSSIBLE_COLLUSION')
   const inconsistent = data.flags.filter((f) => f.category === 'INCONSISTENT_TREATMENT')
+  const verification = data.flags.filter((f) => f.category === 'DOCUMENT_VERIFICATION')
 
   return (
     <div className="flex flex-col gap-6">
@@ -148,8 +150,10 @@ export function RedFlagsPage() {
           Flags shared phone numbers, emails, registered addresses and bank accounts between
           different bidders, documents of the same type whose text is more than{' '}
           {data.similarity_threshold}% similar (documents shorter than{' '}
-          {data.min_similarity_text_length} characters, such as standard forms, are skipped), and
-          requirements where bidders failing the same rule received different final decisions.
+          {data.min_similarity_text_length} characters, such as standard forms, are skipped), the
+          same file (identical SHA-256) or the same certificate number in different bidders'
+          bids, requirements where bidders failing the same rule received different final
+          decisions, and certificates whose details do not match the issuer record.
         </p>
         <p className="mt-2">
           Each item is a <Disclaimer text={data.disclaimer} />. It tells the officer where to look;
@@ -168,8 +172,9 @@ export function RedFlagsPage() {
           <IconShieldCheck width={28} height={28} className="text-pass" />
           <div className="text-base font-semibold text-pass">No red flags</div>
           <p className="max-w-md text-sm text-text-muted">
-            None of the {data.bidders.length} bidders share contact details or near-identical
-            documents, and every shared rule failure received the same final decision.
+            None of the {data.bidders.length} bidders share contact details, files, certificate
+            numbers or near-identical documents, every shared rule failure received the same final
+            decision, and no certificate check found a mismatch.
           </p>
         </Card>
       ) : (
@@ -177,6 +182,7 @@ export function RedFlagsPage() {
           {[
             { label: 'Possible collusion', flags: collusion },
             { label: 'Inconsistent treatment', flags: inconsistent },
+            { label: 'Document verification', flags: verification },
           ].map(
             (group) =>
               group.flags.length > 0 && (

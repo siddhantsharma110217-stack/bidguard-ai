@@ -17,6 +17,7 @@ from app.redflags import (
     MIN_SIMILARITY_TEXT_LENGTH,
     SIMILARITY_THRESHOLD,
     BidSnapshot,
+    CertificateNumber,
     ContactValue,
     Decision,
     DocumentText,
@@ -48,6 +49,31 @@ def document_text(doc: Document) -> str:
     )
 
 
+def certificates(bid: Bid, docs: list[Document]) -> list[CertificateNumber]:
+    """Certificate numbers for the tender's verified requirements, as read
+    from the documents (unreadable or unconfirmed citations are skipped)."""
+    out = []
+    for req in bid.tender.requirements:
+        if not req.verification_required:
+            continue
+        name = (req.rule_params or {}).get("field", "")
+        for doc in docs:
+            data = (doc.fields or {}).get(name) or {}
+            if not data.get("value") or data.get("unreadable"):
+                continue
+            if data.get("citation_status") in ("UNSUPPORTED", "VALUE_NOT_IN_QUOTE"):
+                continue
+            out.append(
+                CertificateNumber(
+                    value=str(data["value"]),
+                    document_name=doc.original_filename,
+                    page=int(data.get("page", 0) or 0),
+                    requirement_code=req.code,
+                )
+            )
+    return out
+
+
 def snapshot(bid: Bid, db: Session) -> BidSnapshot:
     docs = db.query(Document).filter(Document.bid_id == bid.id).order_by(Document.id).all()
     rows = (
@@ -74,9 +100,11 @@ def snapshot(bid: Bid, db: Session) -> BidSnapshot:
                 filename=d.original_filename,
                 doc_type=d.doc_type,
                 text=document_text(d),
+                sha256=d.sha256 or "",
             )
             for d in docs
         ],
+        certificates=certificates(bid, docs),
         decisions=[
             Decision(
                 requirement_id=r.requirement_id,
@@ -88,6 +116,13 @@ def snapshot(bid: Bid, db: Session) -> BidSnapshot:
                 override_reason=r.override_reason or "",
                 override_category=REASON_CATEGORIES.get(r.override_category or "", ""),
                 officer_name=r.officer_name or "",
+                verification_status=r.verification_status or "NOT_APPLICABLE",
+                verification_reason=r.verification_reason or "",
+                verification_source=r.verification_source or "",
+                verification_document=(
+                    (r.verification_details or {}).get("submitted") or {}
+                ).get("document_name", ""),
+                verification_mismatched=(r.verification_details or {}).get("mismatched", []),
             )
             for r in rows
         ],

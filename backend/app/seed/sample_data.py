@@ -13,10 +13,10 @@ doing real work and the bidders differ from one another:
   TechNova Systems      7 PASS · 1 REVIEW (ambiguous BIS certificate)
                         · 1 FAIL (delivery 45 > 30) · 1 MISSING (no OEM MAF)
                         -> 76.0 compliance, risk 53 HIGH, NON-RESPONSIVE
-  Apex Infotech         9 PASS · 1 FAIL (delivery 40 > 30)
-                        -> 90.0 compliance, risk 25 MEDIUM, NON-RESPONSIVE
-  Bharat Digital        10 PASS
-                        -> 100.0 compliance, risk 0 LOW, RESPONSIVE
+  Apex Infotech         8 PASS · 1 REVIEW · 1 FAIL (delivery 40 > 30)
+                        -> 86.0 compliance, risk 33 MEDIUM, NON-RESPONSIVE
+  Bharat Digital        9 PASS · 1 REVIEW
+                        -> 96.0 compliance, risk 8 LOW, RESPONSIVE
   Crestline Computers   9 PASS · 1 MISSING (desirable energy rating)
                         -> 90.0 compliance, risk 20 LOW, RESPONSIVE
 
@@ -24,6 +24,12 @@ Every bidder's Commercial Bid also carries contact fields (`CONTACT_FIELDS`).
 Apex Infotech and Crestline Computers declare the SAME phone number and bank
 account while presenting as unrelated firms — a common indicator of bid
 rigging / cover bidding that a reviewing officer should be able to spot.
+BIS registration (REQ-007) is also checked against the fictional issuer
+registry (app.verification.registry): TechNova VERIFIED (its REVIEW, from an
+unreadable validity date, is unchanged), Bharat UNVERIFIED (no record) and
+Apex VERIFICATION_FAILED (number differs from the issuer record) both turn
+their rule PASS into REVIEW, Crestline VERIFIED.
+
 The Red Flags page (`app.redflags`) surfaces exactly these two shared details;
 TechNova and Bharat Digital share nothing and must stay unflagged.
 
@@ -167,6 +173,9 @@ REQUIREMENTS = [
             "field": "bis_registration_no",
             "expected_display": "Valid BIS registration certificate",
         },
+        # The one requirement checked against the issuer's record
+        # (app.verification). Every other requirement defaults to False.
+        "verification_required": True,
         "expected_doc_types": ["BIS_CERTIFICATE"],
         "weight": 5,
         "source_page": 7,
@@ -381,15 +390,21 @@ TECHNOVA_DOCUMENTS = [
         "has_text_layer": False,
         "fields": {
             "bis_registration_no": {
-                "value": "R-4119____ (partially legible)",
+                "value": "R-41190527",
                 "page": 1,
                 "confidence": 0.42,
                 "ambiguous": True,
                 "ambiguity_reason": (
-                    "the uploaded scan is low-resolution, the registration number is only "
-                    "partially legible and the validity date is not readable"
+                    "the uploaded scan is low-resolution and the validity date is not "
+                    "readable, so the certificate's validity cannot be confirmed"
                 ),
-                "snippet": "BIS Registration No. R-4119____  |  Valid upto: ____/____  (illegible)",
+                "snippet": "BIS Registration No. R-41190527  |  Valid upto: ____/____  (illegible)",
+            },
+            "certificate_holder": {
+                "value": "TechNova Systems Pvt. Ltd.",
+                "page": 1,
+                "confidence": 0.95,
+                "snippet": "Registered to: TechNova Systems Pvt. Ltd.",
             },
         },
     },
@@ -504,6 +519,12 @@ APEX_DOCUMENTS = [
                 "page": 1,
                 "confidence": 0.95,
                 "snippet": "BIS Registration No. R-41087632  |  Valid upto: 31/03/2028",
+            },
+            "certificate_holder": {
+                "value": "Apex Infotech Solutions",
+                "page": 1,
+                "confidence": 0.95,
+                "snippet": "Registered to: Apex Infotech Solutions",
             },
         },
     },
@@ -634,6 +655,12 @@ BHARAT_DOCUMENTS = [
                 "confidence": 0.96,
                 "snippet": "BIS Registration No. R-41052219  |  Valid upto: 30/09/2027",
             },
+            "certificate_holder": {
+                "value": "Bharat Digital Technologies Pvt. Ltd.",
+                "page": 1,
+                "confidence": 0.95,
+                "snippet": "Registered to: Bharat Digital Technologies Pvt. Ltd.",
+            },
         },
     },
     {
@@ -757,6 +784,12 @@ CRESTLINE_DOCUMENTS = [
                 "page": 1,
                 "confidence": 0.95,
                 "snippet": "BIS Registration No. R-41093340  |  Valid upto: 15/01/2028",
+            },
+            "certificate_holder": {
+                "value": "Crestline Computers LLP",
+                "page": 1,
+                "confidence": 0.95,
+                "snippet": "Registered to: Crestline Computers LLP",
             },
         },
     },

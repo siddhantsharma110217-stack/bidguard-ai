@@ -20,6 +20,13 @@ class InvalidPdf(ValueError):
 class PdfText:
     page_count: int
     pages: list[str]  # index 0 = page 1
+    # Digital signature form fields present in the PDF. Their presence is
+    # all this records: the signature and signer are NOT validated.
+    signature_fields: int = 0
+
+    @property
+    def has_signature_field(self) -> bool:
+        return self.signature_fields > 0
 
     @property
     def pages_without_text(self) -> list[int]:
@@ -57,6 +64,16 @@ def page_text(page) -> str:
     return "\n".join(" ".join(w[4] for w in sorted(line, key=lambda w: w[0])) for line in lines)
 
 
+def _signature_fields(doc) -> int:
+    count = 0
+    for page in doc:
+        for widget in page.widgets() or []:
+            if widget.field_type == pymupdf.PDF_WIDGET_TYPE_SIGNATURE:
+                count += 1
+    # Signature flags also cover signatures without a visible widget.
+    return count or (1 if doc.get_sigflags() > 0 else 0)
+
+
 def read_pdf(data: bytes) -> PdfText:
     """Extract text from every page. Raises InvalidPdf for unreadable files."""
     if not data.startswith(b"%PDF-"):
@@ -71,6 +88,6 @@ def read_pdf(data: bytes) -> PdfText:
         if doc.page_count == 0:
             raise InvalidPdf("the PDF has no pages")
         pages = [page_text(page) for page in doc]
-        return PdfText(page_count=doc.page_count, pages=pages)
+        return PdfText(page_count=doc.page_count, pages=pages, signature_fields=_signature_fields(doc))
     finally:
         doc.close()

@@ -10,6 +10,7 @@ import { ErrorState } from '../components/ui/ErrorState'
 import { EmptyState } from '../components/ui/EmptyState'
 import { IconBarChart } from '../components/icons'
 import { EvidenceSource } from '../components/EvidenceSource'
+import { VerificationBadge } from '../components/VerificationBadge'
 import { NOT_SPECIFIED, REASON_CATEGORIES, categoryLabel } from '../overrideCategories'
 
 function formatTimestamp(iso: string | null): string {
@@ -316,6 +317,15 @@ export function ReportsPage() {
                       {r.system_verdict} → {r.verdict} (officer)
                     </div>
                   )}
+                  {r.verification_required && (
+                    <div className="mt-1.5">
+                      <div className="text-[11px] text-text-faint">Verification</div>
+                      <VerificationBadge status={r.verification_status} />
+                      <p className="mt-1 max-w-[16rem] text-[11px] text-text-muted">
+                        {r.verification_reason}
+                      </p>
+                    </div>
+                  )}
                 </td>
                 <td className="px-4 py-3 tabular-nums text-text">{r.score.toFixed(0)}</td>
                 <td className="px-4 py-3 text-xs text-text-muted">
@@ -374,6 +384,12 @@ export function ReportsPage() {
                   Evidence:{' '}
                   {r.evidence ? `Found in ${r.source_document}` : 'Not found in submitted package'}
                 </p>
+                {r.verification_required && r.verification_status !== 'NOT_APPLICABLE' && (
+                  <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-text-muted">
+                    Verification: <VerificationBadge status={r.verification_status} />{' '}
+                    {r.verification_reason} ({r.verification_source})
+                  </p>
+                )}
                 <p className="mt-1 text-xs font-medium text-accent">
                   Recommended action: {r.recommended_action}
                 </p>

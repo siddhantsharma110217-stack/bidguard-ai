@@ -461,3 +461,24 @@ def extract_contacts(docs: list[SourceDoc]) -> dict[str, tuple[int, dict]]:
                             ),
                         )
     return found
+
+
+# ---------------------------------------------------------------------------
+# Certificate holder (for issuer verification)
+# ---------------------------------------------------------------------------
+
+HOLDER = re.compile(
+    r"\b(?:certificate holder|registered to|licensee|holder|brand)\s*[:\-]\s*(.+?)"
+    r"(?=\s+(?:valid|standard|is\s+\d)\b|$)",
+    re.I,
+)
+
+
+def find_certificate_holder(page_text: str) -> tuple[str, str] | None:
+    """(holder, line) from a certificate page, e.g. "Registered to: X"."""
+    for raw in page_text.splitlines():
+        line = _clean(raw)
+        m = HOLDER.search(line)
+        if m and m.group(1).strip():
+            return m.group(1).strip().rstrip(",;"), line
+    return None

@@ -21,6 +21,8 @@ from app.auth import current_user, require_officer
 from app.db import get_db
 from app.evaluation.evaluator import get_evaluator
 from app.evaluation.scoring import VERDICTS, compute_summary, score_for_verdict
+from app.verification.adapter import NOT_APPLICABLE
+from app.verification.service import apply_verification, verify_outcome
 from app.models import Bid, Document, Evaluation, Evidence, Requirement, User
 from app.schemas import (
     BidOut,
@@ -64,8 +66,13 @@ def _apply_summary_to_bid(bid: Bid, rows: list[Evaluation]) -> None:
     bid.gate_status = summary["gate_status"]
 
 
-def _run_evaluation(bid_id: int, db: Session) -> None:
-    """Evaluate every requirement for the bid and persist the results."""
+def _run_evaluation(bid_id: int, db: Session, user: User | None = None) -> None:
+    """Evaluate every requirement for the bid and persist the results.
+
+    Requirements marked `verification_required` are also checked against the
+    issuer's record; each check is written to the audit log with the user
+    who ran the evaluation.
+    """
     bid = get_bid_or_404(bid_id, db)
 
     requirements = (
@@ -120,9 +127,25 @@ def _run_evaluation(bid_id: int, db: Session) -> None:
             status_code=500, detail="The evaluation produced no results."
         )
 
-    rows: list[Evaluation] = []
+    req_by_id = {r.id: r for r in requirements}
+    checks = []
     for out in outcomes:
+        req = req_by_id[out.requirement_id]
+        check = verify_outcome(req, out, documents, bid.bidder_name)
+        apply_verification(out, check)
+        checks.append(check)
+
+    rows: list[Evaluation] = []
+    for out, check in zip(outcomes, checks):
         row = Evaluation(
+            verification_status=check.status,
+            verification_reason=check.reason,
+            verification_source=check.source,
+            verification_checked_at=check.checked_at,
+            verification_document_id=(
+                out.source_document_id if check.status != NOT_APPLICABLE else None
+            ),
+            verification_details=check.details(),
             bid_id=bid_id,
             requirement_id=out.requirement_id,
             verdict=out.verdict,
@@ -146,6 +169,28 @@ def _run_evaluation(bid_id: int, db: Session) -> None:
         db.add(row)
         db.flush()
         rows.append(row)
+
+        if check.status != NOT_APPLICABLE:
+            doc = next(d for d in documents if d.id == out.source_document_id)
+            req = req_by_id[out.requirement_id]
+            append_event(
+                db,
+                "DOCUMENT_VERIFICATION",
+                timestamp=check.checked_at,
+                bid_id=bid.id,
+                bidder_name=bid.bidder_name,
+                requirement_id=req.id,
+                requirement_code=req.code,
+                requirement_title=req.title,
+                document_id=doc.id,
+                document_name=doc.original_filename,
+                document_sha256=doc.sha256 or "",
+                check_status=check.status,
+                check_source=check.source,
+                reason=check.reason,
+                officer_name=user.full_name if user else "",
+                officer_username=user.username if user else "",
+            )
 
         if out.source_document_id is not None:
             db.add(
@@ -217,6 +262,13 @@ def _load_results(bid_id: int, db: Session) -> EvaluationResultsOut:
                 override_category=row.override_category or "",
                 officer_name=row.officer_name or "",
                 officer_username=row.officer_username or "",
+                verification_required=bool(req.verification_required),
+                verification_status=row.verification_status or "NOT_APPLICABLE",
+                verification_reason=row.verification_reason or "",
+                verification_source=row.verification_source or "",
+                verification_checked_at=row.verification_checked_at or "",
+                verification_details=row.verification_details or {},
+                rule_verdict=(row.rule_trace or {}).get("rule_verdict", row.verdict),
                 overridden_at=row.overridden_at,
             )
         )
@@ -238,8 +290,12 @@ def _load_results(bid_id: int, db: Session) -> EvaluationResultsOut:
 
 
 @router.post("", response_model=EvaluationResultsOut, status_code=201)
-def create_evaluation(payload: EvaluationCreate, db: Session = Depends(get_db)):
-    _run_evaluation(payload.bid_id, db)
+def create_evaluation(
+    payload: EvaluationCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    _run_evaluation(payload.bid_id, db, user)
     return _load_results(payload.bid_id, db)
 
 

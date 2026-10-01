@@ -78,6 +78,21 @@ class DocumentOut(BaseModel):
     extraction_mode: str = ""  # AI | RULES | RULES_FALLBACK | "" (pre-extracted demo data)
     extraction_label: str = ""
     extraction_note: str = ""
+    # Uploaded PDFs: a digital signature field is present (None = not checked,
+    # e.g. seeded documents). The signature itself is NOT validated.
+    has_signature_field: bool | None = None
+    # "Re-verify file": UNCHANGED | CHANGED | FILE_MISSING ("" = never run)
+    reverifiable: bool = False
+    last_reverify_status: str = ""
+    last_reverified_at: datetime | None = None
+    # Issuer verification of this document from the latest evaluation
+    # ("" = not checked yet / not a verified document type).
+    verification_status: str = ""
+    verification_reason: str = ""
+
+    @field_serializer("last_reverified_at")
+    def _ser_last_reverified_at(self, value: datetime | None) -> str | None:
+        return _as_utc(value)
 
 
 class ContactFieldOut(BaseModel):
@@ -158,6 +173,15 @@ class ResultOut(BaseModel):
     override_category: str = ""
     officer_name: str = ""
     officer_username: str = ""
+    # Document trust layer (separate from the compliance verdict).
+    # `rule_verdict` is the rule engine's verdict before verification.
+    verification_required: bool = False
+    verification_status: str = "NOT_APPLICABLE"
+    verification_reason: str = ""
+    verification_source: str = ""
+    verification_checked_at: str = ""
+    verification_details: dict = {}
+    rule_verdict: str = ""
     overridden_at: datetime | None = None
 
     @field_serializer("overridden_at")
@@ -223,6 +247,8 @@ class AuditEventOut(BaseModel):
     reason_category: str
     officer_name: str
     officer_username: str
+    check_status: str
+    check_source: str
     document_id: int | None
     document_name: str
     document_sha256: str
@@ -322,3 +348,12 @@ class DemoAccountOut(BaseModel):
     designation: str
     role: str
     demo_password: str | None
+
+
+class ReverifyOut(BaseModel):
+    document_id: int
+    status: str  # UNCHANGED | CHANGED | FILE_MISSING
+    label: str
+    recorded_sha256: str
+    current_sha256: str
+    checked_at: str

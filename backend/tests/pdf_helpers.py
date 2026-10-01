@@ -55,7 +55,7 @@ COMPLIANT_PAGES = [
         ("row", "Energy Efficiency", "ENERGY STAR 8.0 certified"),
     ],
     ["Commercial terms", "Delivery Schedule: Complete delivery within 25 days of Purchase Order."],
-    ["BIS Registration No.: R-41234567"],
+    ["BIS Registration No.: R-41234567", "Registered to: Arcadia Computing Ltd."],
     ["MAF Ref. No.: MAF/2026/TEST/0001"],
 ]
 

@@ -198,8 +198,11 @@ def test_ai_mode_with_valid_response():
     provider = FakeProvider(good_response(doc))
     result = extract_bid(REQS, [doc], provider=provider)
     assert result.mode == "AI" and result.label == "AI extraction"
-    assert all(d["extraction_method"] == "AI" for _, d in result.fields.values())
-    assert all(d["citation_status"] == "VERIFIED" for _, d in result.fields.values())
+    # Requirement fields; supporting fields (certificate holder, contacts)
+    # are always read with rules.
+    req_fields = [result.fields[f][1] for f in FIELD_OF.values()]
+    assert all(d["extraction_method"] == "AI" for d in req_fields)
+    assert all(d["citation_status"] == "VERIFIED" for d in req_fields)
     assert verdicts([doc], provider) == ALL_PASS
 
 
@@ -241,7 +244,11 @@ def test_malformed_ai_output_falls_back_to_rules(provider):
     result = extract_bid(REQS, [doc], provider=provider)
     assert result.mode == "RULES_FALLBACK"
     assert "AI extraction failed" in result.note
-    assert all(d["extraction_method"] == "RULES_FALLBACK" for _, d in result.fields.values())
+    assert all(
+        result.fields[f][1]["extraction_method"] == "RULES_FALLBACK"
+        for f in FIELD_OF.values()
+        if f in result.fields
+    )
     assert verdicts([doc], provider) == verdicts([doc], None)
 
 

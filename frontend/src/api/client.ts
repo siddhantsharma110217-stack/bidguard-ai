@@ -13,6 +13,7 @@ import type {
   HealthStatus,
   OverrideRequest,
   RedFlagReport,
+  ReverifyResult,
   UploadResult,
   RequirementList,
   Tender,
@@ -170,4 +171,11 @@ export function getMe(): Promise<AuthUser> {
 
 export function getDemoAccounts(): Promise<DemoAccount[]> {
   return request<DemoAccount[]>('/api/auth/demo-accounts')
+}
+
+/** Re-hash an uploaded file and compare it with its upload fingerprint (officers only). */
+export function reverifyDocument(bidId: number, documentId: number): Promise<ReverifyResult> {
+  return request<ReverifyResult>(`/api/bids/${bidId}/documents/${documentId}/reverify`, {
+    method: 'POST',
+  })
 }

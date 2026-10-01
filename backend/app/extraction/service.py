@@ -78,7 +78,7 @@ def _unreadable_placeholder(docs: list[SourceDoc]) -> tuple[int, dict] | None:
 def extract_bid(requirements: list, docs: list[SourceDoc], provider="auto") -> ExtractionResult:
     """Extract evidence for every requirement from the bid's documents.
 
-    `provider` defaults to the configured one; tests pass a fake provider,
+    `provider` defaults to the configured one; tests pass a stand-in provider,
     or None to force rule-based mode.
     """
     if provider == "auto":
@@ -115,6 +115,23 @@ def extract_bid(requirements: list, docs: list[SourceDoc], provider="auto") -> E
             if result.mode == "RULES_FALLBACK":
                 data = {**data, "extraction_method": "RULES_FALLBACK"}
             result.fields[name] = (d_idx, data)
+
+    # The certificate holder, read from the page the certificate number was
+    # found on, for issuer verification (app.verification).
+    bis = result.fields.get("bis_registration_no")
+    if bis and not bis[1].get("unreadable"):
+        d_idx, data = bis
+        page = int(data.get("page", 0) or 0)
+        if 1 <= page <= len(docs[d_idx].pages):
+            holder = rules.find_certificate_holder(docs[d_idx].pages[page - 1])
+            if holder:
+                result.fields["certificate_holder"] = (d_idx, {
+                    "value": holder[0],
+                    "page": page,
+                    "confidence": rules.CLEAN_SINGLE_CONFIDENCE,
+                    "snippet": holder[1],
+                    "extraction_method": "RULES",
+                })
 
     # Contact details are always read with deterministic patterns (in AI
     # mode too): they feed Red Flags, not verdicts.

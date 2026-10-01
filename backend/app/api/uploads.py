@@ -155,6 +155,7 @@ def upload_bid(
                 doc_type=classify(filename, "\n".join(text.pages)),
                 doc_type_confidence=0.6,
                 classified_by="KEYWORDS",
+                has_signature_field=text.has_signature_field,
                 fields={},
             )
             db.add(doc)

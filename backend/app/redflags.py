@@ -58,6 +58,17 @@ class DocumentText:
     filename: str
     doc_type: str
     text: str
+    sha256: str = ""
+
+
+@dataclass
+class CertificateNumber:
+    """A certificate number a bidder submitted for a verified requirement."""
+
+    value: str
+    document_name: str = ""
+    page: int = 0
+    requirement_code: str = ""
 
 
 @dataclass
@@ -71,6 +82,11 @@ class Decision:
     override_reason: str = ""
     override_category: str = ""  # label, e.g. "Committee decision"
     officer_name: str = ""
+    verification_status: str = "NOT_APPLICABLE"
+    verification_reason: str = ""
+    verification_source: str = ""
+    verification_document: str = ""
+    verification_mismatched: list = field(default_factory=list)  # [{label, submitted, issuer}]
 
 
 @dataclass
@@ -80,6 +96,7 @@ class BidSnapshot:
     contact: list[ContactValue] = field(default_factory=list)
     documents: list[DocumentText] = field(default_factory=list)
     decisions: list[Decision] = field(default_factory=list)
+    certificates: list[CertificateNumber] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -245,9 +262,134 @@ def inconsistent_treatment_flags(bids: list[BidSnapshot]) -> list[dict]:
     return flags
 
 
+def duplicate_file_flags(bids: list[BidSnapshot]) -> list[dict]:
+    """The exact same file (same SHA-256) in two different bidders' bids."""
+    groups: dict[str, list[tuple[BidSnapshot, DocumentText]]] = {}
+    for bid in bids:
+        for doc in bid.documents:
+            if doc.sha256:
+                groups.setdefault(doc.sha256, []).append((bid, doc))
+    flags = []
+    for sha, entries in groups.items():
+        if len({b.bid_id for b, _ in entries}) < 2:
+            continue
+        flags.append(
+            {
+                "kind": "DUPLICATE_FILE",
+                "category": "POSSIBLE_COLLUSION",
+                "title": "Duplicate file",
+                "summary": (
+                    f"{len({b.bid_id for b, _ in entries})} different bidders submitted a file "
+                    "with the same SHA-256 fingerprint (byte-for-byte identical)."
+                ),
+                "bidders": _unique_bidders(b for b, _ in entries),
+                "evidence": [
+                    {
+                        "bid_id": b.bid_id,
+                        "bidder_name": b.bidder_name,
+                        "label": d.filename,
+                        "value": f"SHA-256 {sha}",
+                        "source_document": d.filename,
+                        "source_page": 0,
+                        "detail": "",
+                    }
+                    for b, d in entries
+                ],
+                "similarity": None,
+                "requirement_code": "",
+            }
+        )
+    return flags
+
+
+def duplicate_certificate_flags(bids: list[BidSnapshot]) -> list[dict]:
+    """The same certificate number in two different bidders' documents."""
+    from app.verification.registry import normalise_number
+
+    groups: dict[str, list[tuple[BidSnapshot, CertificateNumber]]] = {}
+    for bid in bids:
+        for cert in bid.certificates:
+            key = normalise_number(cert.value)
+            if key:
+                groups.setdefault(key, []).append((bid, cert))
+    flags = []
+    for entries in groups.values():
+        if len({b.bid_id for b, _ in entries}) < 2:
+            continue
+        flags.append(
+            {
+                "kind": "DUPLICATE_CERTIFICATE",
+                "category": "POSSIBLE_COLLUSION",
+                "title": "Duplicate certificate number",
+                "summary": "Different bidders submitted the same certificate number.",
+                "bidders": _unique_bidders(b for b, _ in entries),
+                "evidence": [
+                    {
+                        "bid_id": b.bid_id,
+                        "bidder_name": b.bidder_name,
+                        "label": "Certificate number",
+                        "value": c.value,
+                        "source_document": c.document_name,
+                        "source_page": c.page,
+                        "detail": c.requirement_code,
+                    }
+                    for b, c in entries
+                ],
+                "similarity": None,
+                "requirement_code": entries[0][1].requirement_code,
+            }
+        )
+    return flags
+
+
+def verification_mismatch_flags(bids: list[BidSnapshot]) -> list[dict]:
+    """A certificate whose details do not match the issuer record."""
+    flags = []
+    for bid in bids:
+        for d in bid.decisions:
+            if d.verification_status != "VERIFICATION_FAILED":
+                continue
+            flags.append(
+                {
+                    "kind": "VERIFICATION_MISMATCH",
+                    "category": "DOCUMENT_VERIFICATION",
+                    "title": f"Verification mismatch — {d.requirement_code} {d.requirement_title}",
+                    "summary": f"Verification failed — officer review required. {d.verification_reason}",
+                    "bidders": [_bidder(bid)],
+                    "evidence": [
+                        {
+                            "bid_id": bid.bid_id,
+                            "bidder_name": bid.bidder_name,
+                            "label": m.get("label", ""),
+                            "value": f"Submitted: {m.get('submitted', '')} · Issuer record: {m.get('issuer', '')}",
+                            "source_document": d.verification_document,
+                            "source_page": 0,
+                            "detail": f"Source: {d.verification_source}",
+                        }
+                        for m in d.verification_mismatched
+                    ],
+                    "similarity": None,
+                    "requirement_code": d.requirement_code,
+                }
+            )
+    return flags
+
+
+def _unique_bidders(bids) -> list[dict]:
+    seen, out = set(), []
+    for b in bids:
+        if b.bid_id not in seen:
+            seen.add(b.bid_id)
+            out.append(_bidder(b))
+    return out
+
+
 def detect_red_flags(bids: list[BidSnapshot]) -> list[dict]:
     return (
         shared_contact_flags(bids)
         + similar_document_flags(bids)
+        + duplicate_file_flags(bids)
+        + duplicate_certificate_flags(bids)
         + inconsistent_treatment_flags(bids)
+        + verification_mismatch_flags(bids)
     )

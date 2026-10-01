@@ -18,8 +18,9 @@ from tests.test_extraction import FakeProvider, good_response, source
 SAMPLES_DIR = Path(__file__).resolve().parents[2] / "samples"
 DEMO_NUMBERS = {
     "TechNova Systems Pvt. Ltd.": (76.0, "HIGH", "NON_RESPONSIVE"),
-    "Apex Infotech Solutions": (90.0, "MEDIUM", "NON_RESPONSIVE"),
-    "Bharat Digital Technologies Pvt. Ltd.": (100.0, "LOW", "RESPONSIVE"),
+    # Apex and Bharat: BIS PASS -> REVIEW by issuer verification (were 90.0, 100.0).
+    "Apex Infotech Solutions": (86.0, "MEDIUM", "NON_RESPONSIVE"),
+    "Bharat Digital Technologies Pvt. Ltd.": (96.0, "LOW", "RESPONSIVE"),
     "Crestline Computers LLP": (90.0, "LOW", "RESPONSIVE"),
 }
 
@@ -208,7 +209,9 @@ def test_scanned_document_is_marked_and_routes_to_review(client, tender):
 EXPECTED_SAMPLE_VERDICTS = {
     "northwind_edutech_bid.pdf": {"REQ-007": "REVIEW"},
     "sahyadri_infosystems_bid.pdf": {"REQ-002": "FAIL", "REQ-008": "FAIL", "REQ-009": "MISSING"},
-    "vertex_peak_bid.pdf": {"REQ-006": "FAIL", "REQ-008": "FAIL"},
+    # REQ-007 passes the rule but the issuer record for R-41099887 names a
+    # different company: VERIFICATION_FAILED -> REVIEW (was PASS).
+    "vertex_peak_bid.pdf": {"REQ-006": "FAIL", "REQ-007": "REVIEW", "REQ-008": "FAIL"},
 }
 
 

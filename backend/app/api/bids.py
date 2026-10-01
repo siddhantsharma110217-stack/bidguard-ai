@@ -1,15 +1,21 @@
+import hashlib
+from datetime import datetime, timezone
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app.audit import append_event, utc_timestamp
 from app.auth import current_user, require_officer
 from app.db import get_db
-from app.models import Bid, Document, Tender
+from app.models import Bid, Document, Evaluation, Tender, User
 from app.schemas import (
     BidCreate,
     BidDocumentsOut,
     BidOut,
     ContactFieldOut,
     DocumentOut,
+    ReverifyOut,
     TenderOut,
 )
 from app.extraction.pdf import NO_TEXT_LABEL
@@ -38,7 +44,7 @@ def _text_status(doc: Document) -> str:
     return f"Page{'s' if len(blank) > 1 else ''} {pages}: {NO_TEXT_LABEL}"
 
 
-def document_out(doc: Document) -> DocumentOut:
+def document_out(doc: Document, verification: tuple[str, str] | None = None) -> DocumentOut:
     return DocumentOut(
         id=doc.id,
         original_filename=doc.original_filename,
@@ -56,6 +62,12 @@ def document_out(doc: Document) -> DocumentOut:
         extraction_mode=doc.extraction_mode or "",
         extraction_label=MODE_LABELS.get(doc.extraction_mode or "", ""),
         extraction_note=doc.extraction_note or "",
+        has_signature_field=doc.has_signature_field,
+        reverifiable=doc.source == "UPLOAD",
+        last_reverify_status=doc.last_reverify_status or "",
+        last_reverified_at=doc.last_reverified_at,
+        verification_status=verification[0] if verification else "",
+        verification_reason=verification[1] if verification else "",
     )
 
 
@@ -122,10 +134,91 @@ def get_bid_documents(bid_id: int, db: Session = Depends(get_db)):
         .order_by(Document.id)
         .all()
     )
+    # Issuer verification results from the latest evaluation, per document.
+    checks = {
+        row.verification_document_id: (row.verification_status, row.verification_reason)
+        for row in db.query(Evaluation).filter(
+            Evaluation.bid_id == bid_id, Evaluation.verification_document_id.isnot(None)
+        )
+    }
     return BidDocumentsOut(
         bid=BidOut.model_validate(bid),
         tender=TenderOut.model_validate(bid.tender),
         total=len(docs),
-        documents=[document_out(d) for d in docs],
+        documents=[document_out(d, checks.get(d.id)) for d in docs],
         contact=contact_details(docs),
+    )
+
+
+FILE_CHECK_SOURCE = "Stored file compared with the SHA-256 recorded at upload"
+FILE_CHECK_LABELS = {
+    "UNCHANGED": "Unchanged since upload",
+    "CHANGED": "FILE CHANGED SINCE UPLOAD",
+    "FILE_MISSING": "Stored file is missing",
+}
+
+
+@router.post(
+    "/{bid_id}/documents/{document_id}/reverify",
+    response_model=ReverifyOut,
+)
+def reverify_document(
+    bid_id: int,
+    document_id: int,
+    db: Session = Depends(get_db),
+    officer: User = Depends(require_officer),
+):
+    """Re-hash an uploaded file and compare it with its upload fingerprint.
+
+    This shows only whether the stored bytes changed since upload; it says
+    nothing about whether the document is genuine. Every check is audited.
+    """
+    bid = get_bid_or_404(bid_id, db)
+    doc = db.get(Document, document_id)
+    if doc is None or doc.bid_id != bid.id:
+        raise HTTPException(status_code=404, detail=f"Document {document_id} was not found in this bid.")
+    if doc.source != "UPLOAD" or not doc.storage_path:
+        raise HTTPException(
+            status_code=409,
+            detail="Only uploaded files can be re-verified; sample documents have no stored file.",
+        )
+
+    path = Path(doc.storage_path)
+    if path.is_file():
+        current = hashlib.sha256(path.read_bytes()).hexdigest()
+        status = "UNCHANGED" if current == doc.sha256 else "CHANGED"
+    else:
+        current, status = "", "FILE_MISSING"
+
+    at = datetime.now(timezone.utc)
+    reason = {
+        "UNCHANGED": "The stored file's SHA-256 matches the fingerprint recorded at upload.",
+        "CHANGED": "The stored file's SHA-256 differs from the fingerprint recorded at upload.",
+        "FILE_MISSING": "The stored file could not be found, so it could not be re-hashed.",
+    }[status]
+    doc.last_reverify_status = status
+    doc.last_reverified_at = at
+    append_event(
+        db,
+        "FILE_REVERIFIED",
+        timestamp=utc_timestamp(at),
+        bid_id=bid.id,
+        bidder_name=bid.bidder_name,
+        document_id=doc.id,
+        document_name=doc.original_filename,
+        document_sha256=current,
+        check_status=status,
+        check_source=FILE_CHECK_SOURCE,
+        reason=reason,
+        officer_name=officer.full_name,
+        officer_username=officer.username,
+    )
+    db.commit()
+    return ReverifyOut(
+        document_id=doc.id,
+        status=status,
+        label=FILE_CHECK_LABELS[status],
+        recorded_sha256=doc.sha256 or "",
+        current_sha256=current,
+        checked_at=utc_timestamp(at),
     )

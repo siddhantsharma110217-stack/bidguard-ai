@@ -10,6 +10,7 @@ import { LoadingState } from '../components/ui/LoadingState'
 import { ErrorState } from '../components/ui/ErrorState'
 import { EmptyState } from '../components/ui/EmptyState'
 import { OverrideForm } from '../components/OverrideForm'
+import { categoryLabel } from '../overrideCategories'
 import { IconActivity, IconSpinner } from '../components/icons'
 
 export function EvaluationPage() {
@@ -161,6 +162,9 @@ export function EvaluationPage() {
                     <td className="px-4 py-3">
                       {r.overridden && (
                         <div className="mb-1.5 max-w-[14rem] text-xs text-text-muted">
+                          <div className="font-medium text-text">
+                            {categoryLabel(r.override_category)}
+                          </div>
                           <span className="font-medium text-text">{r.officer_name}</span>:{' '}
                           {r.override_reason}
                         </div>

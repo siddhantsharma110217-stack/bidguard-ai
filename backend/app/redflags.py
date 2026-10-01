@@ -69,6 +69,7 @@ class Decision:
     final_verdict: str
     explanation: str = ""
     override_reason: str = ""
+    override_category: str = ""  # label, e.g. "Committee decision"
     officer_name: str = ""
 
 
@@ -229,7 +230,8 @@ def inconsistent_treatment_flags(bids: list[BidSnapshot]) -> list[dict]:
                         "source_document": "",
                         "source_page": 0,
                         "detail": (
-                            f"Overridden by {d.officer_name}: {d.override_reason}"
+                            f"Overridden by {d.officer_name} "
+                            f"({d.override_category or 'Not specified'}): {d.override_reason}"
                             if d.final_verdict != d.system_verdict
                             else "System verdict kept"
                         ),

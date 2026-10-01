@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.api.bids import contact_details
 from app.api.tenders import get_tender_or_404
+from app.audit import REASON_CATEGORIES
 from app.db import get_db
 from app.models import Bid, Document, Evaluation
 from app.redflags import (
@@ -79,6 +80,7 @@ def snapshot(bid: Bid, db: Session) -> BidSnapshot:
                 final_verdict=r.officer_verdict or r.verdict,
                 explanation=r.explanation,
                 override_reason=r.override_reason or "",
+                override_category=REASON_CATEGORIES.get(r.override_category or "", ""),
                 officer_name=r.officer_name or "",
             )
             for r in rows

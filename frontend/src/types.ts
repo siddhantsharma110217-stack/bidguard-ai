@@ -119,6 +119,8 @@ export interface EvaluationResult {
   overridden: boolean
   officer_verdict: Verdict | null
   override_reason: string
+  /** Reason category code; '' for overrides made before categories existed. */
+  override_category: string
   officer_name: string
   overridden_at: string | null
 }
@@ -126,6 +128,7 @@ export interface EvaluationResult {
 export interface OverrideRequest {
   requirement_id: number
   verdict: Verdict
+  reason_category: string
   reason: string
   officer_name: string
 }
@@ -186,6 +189,7 @@ export interface AuditEvent {
   system_verdict: Verdict | ''
   officer_verdict: Verdict | ''
   reason: string
+  reason_category: string
   officer_name: string
   document_id: number | null
   document_name: string

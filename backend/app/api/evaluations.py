@@ -16,7 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.api.bids import get_bid_or_404
-from app.audit import append_event, utc_timestamp
+from app.audit import REASON_CATEGORIES, append_event, utc_timestamp
 from app.db import get_db
 from app.evaluation.evaluator import get_evaluator
 from app.evaluation.scoring import VERDICTS, compute_summary, score_for_verdict
@@ -94,6 +94,7 @@ def _run_evaluation(bid_id: int, db: Session) -> None:
         row.requirement_id: (
             row.officer_verdict,
             row.override_reason,
+            row.override_category,
             row.officer_name,
             row.overridden_at,
         )
@@ -133,6 +134,7 @@ def _run_evaluation(bid_id: int, db: Session) -> None:
             (
                 row.officer_verdict,
                 row.override_reason,
+                row.override_category,
                 row.officer_name,
                 row.overridden_at,
             ) = override
@@ -205,6 +207,7 @@ def _load_results(bid_id: int, db: Session) -> EvaluationResultsOut:
                 overridden=row.officer_verdict is not None,
                 officer_verdict=row.officer_verdict,
                 override_reason=row.override_reason or "",
+                override_category=row.override_category or "",
                 officer_name=row.officer_name or "",
                 overridden_at=row.overridden_at,
             )
@@ -248,6 +251,7 @@ def create_override(bid_id: int, payload: OverrideCreate, db: Session = Depends(
     bid = get_bid_or_404(bid_id, db)
 
     verdict = payload.verdict.strip().upper()
+    category = payload.reason_category.strip().upper()
     reason = payload.reason.strip()
     officer_name = payload.officer_name.strip()
 
@@ -256,10 +260,22 @@ def create_override(bid_id: int, payload: OverrideCreate, db: Session = Depends(
             status_code=422,
             detail=f"Verdict must be one of {', '.join(VERDICTS)}.",
         )
+    if category not in REASON_CATEGORIES:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "A reason category is required. Choose one of: "
+                + "; ".join(REASON_CATEGORIES.values())
+                + "."
+            ),
+        )
     if len(reason) < MIN_REASON_LENGTH:
         raise HTTPException(
             status_code=422,
-            detail=f"A reason of at least {MIN_REASON_LENGTH} characters is required.",
+            detail=(
+                f"Details and reference of at least {MIN_REASON_LENGTH} "
+                "characters are required."
+            ),
         )
     if not officer_name:
         raise HTTPException(status_code=422, detail="The officer's name is required.")
@@ -291,11 +307,13 @@ def create_override(bid_id: int, payload: OverrideCreate, db: Session = Depends(
         # Setting it back to the system's verdict withdraws the override.
         row.officer_verdict = None
         row.override_reason = ""
+        row.override_category = ""
         row.officer_name = ""
         row.overridden_at = None
     else:
         row.officer_verdict = verdict
         row.override_reason = reason
+        row.override_category = category
         row.officer_name = officer_name
         row.overridden_at = at
 
@@ -311,6 +329,7 @@ def create_override(bid_id: int, payload: OverrideCreate, db: Session = Depends(
         system_verdict=row.verdict,
         officer_verdict=verdict,
         reason=reason,
+        reason_category=category,
         officer_name=officer_name,
     )
 

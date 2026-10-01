@@ -9,6 +9,7 @@ import { LoadingState } from '../components/ui/LoadingState'
 import { ErrorState } from '../components/ui/ErrorState'
 import { EmptyState } from '../components/ui/EmptyState'
 import { IconBarChart } from '../components/icons'
+import { NOT_SPECIFIED, REASON_CATEGORIES, categoryLabel } from '../overrideCategories'
 
 function formatTimestamp(iso: string | null): string {
   if (!iso) return 'Not recorded'
@@ -79,6 +80,14 @@ export function ReportsPage() {
   )
   const attentionItems = results.results.filter((r) => r.verdict !== 'PASS')
   const overrides = results.results.filter((r) => r.overridden)
+  // Every category is listed (zeros included) so reports are comparable;
+  // "Not specified" only appears when an older override lacks one.
+  const categoryCounts = [...REASON_CATEGORIES.map((c) => c.label), NOT_SPECIFIED]
+    .map((label) => ({
+      label,
+      count: overrides.filter((r) => categoryLabel(r.override_category) === label).length,
+    }))
+    .filter((c) => c.label !== NOT_SPECIFIED || c.count > 0)
   const counts: Record<Verdict, number> = {
     PASS: summary.passed,
     REVIEW: summary.review,
@@ -193,6 +202,23 @@ export function ReportsPage() {
               Verdicts changed by an evaluating officer. Scores and responsiveness above use the
               officer's verdict; each change is recorded in the tamper-evident audit log.
             </p>
+            <div className="mt-3">
+              <div className="text-xs font-medium uppercase tracking-wide text-text-faint">
+                Overrides by category
+              </div>
+              <dl className="mt-1.5 grid max-w-sm grid-cols-1 gap-y-1 text-xs">
+                {categoryCounts.map((c) => (
+                  <div key={c.label} className="flex justify-between gap-3">
+                    <dt className={c.count ? 'text-text' : 'text-text-faint'}>{c.label}</dt>
+                    <dd
+                      className={`tabular-nums ${c.count ? 'font-semibold text-text' : 'text-text-faint'}`}
+                    >
+                      {c.count}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
             <ul className="mt-3 space-y-3">
               {overrides.map((r) => (
                 <li
@@ -207,6 +233,12 @@ export function ReportsPage() {
                       {r.system_verdict} → {r.verdict}
                     </span>
                     , {r.override_reason}
+                  </p>
+                  <p className="mt-1 text-xs text-text-muted">
+                    Category:{' '}
+                    <span className="font-medium text-text">
+                      {categoryLabel(r.override_category)}
+                    </span>
                   </p>
                   <p className="mt-1 text-xs text-text-faint">
                     Overridden by {r.officer_name}

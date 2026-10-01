@@ -165,6 +165,9 @@ class Evaluation(Base):
     # `officer_verdict` is set it is the effective verdict for scoring/reports.
     officer_verdict: Mapped[str | None] = mapped_column(String, nullable=True)
     override_reason: Mapped[str] = mapped_column(Text, default="")
+    # One of app.audit.REASON_CATEGORIES; "" on overrides made before
+    # categories existed.
+    override_category: Mapped[str] = mapped_column(String, default="")
     officer_name: Mapped[str] = mapped_column(String, default="")
     overridden_at: Mapped[datetime | None] = mapped_column(nullable=True)
 
@@ -260,6 +263,7 @@ class AuditEvent(Base):
     system_verdict: Mapped[str] = mapped_column(String, default="")
     officer_verdict: Mapped[str] = mapped_column(String, default="")
     reason: Mapped[str] = mapped_column(Text, default="")
+    reason_category: Mapped[str] = mapped_column(String, default="")
     officer_name: Mapped[str] = mapped_column(String, default="")
 
     document_id: Mapped[int | None] = mapped_column(Integer, nullable=True)

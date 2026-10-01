@@ -290,7 +290,13 @@ def test_override_creates_and_resolves_inconsistent_treatment(client, demo):
     def override(name):
         resp = client.post(
             f"/api/evaluations/{demo['by_name'][name]}/overrides",
-            json={"requirement_id": req_008, "verdict": "PASS", "reason": REASON, "officer_name": "A. Sharma"},
+            json={
+                "requirement_id": req_008,
+                "verdict": "PASS",
+                "reason_category": "BIDDER_CLARIFICATION",
+                "reason": REASON,
+                "officer_name": "A. Sharma",
+            },
         )
         assert resp.status_code == 201, resp.text
 
@@ -304,6 +310,7 @@ def test_override_creates_and_resolves_inconsistent_treatment(client, demo):
     by_name = {e["bidder_name"]: e for e in f["evidence"]}
     assert by_name[TECHNOVA]["label"] == "FAIL → PASS"
     assert "A. Sharma" in by_name[TECHNOVA]["detail"] and REASON in by_name[TECHNOVA]["detail"]
+    assert "(Clarification received from bidder)" in by_name[TECHNOVA]["detail"]
     assert by_name[APEX]["label"] == "FAIL → FAIL"
     assert "45" in by_name[TECHNOVA]["value"] and "40" in by_name[APEX]["value"]
 

@@ -142,6 +142,7 @@ class ResultOut(BaseModel):
     overridden: bool = False
     officer_verdict: str | None = None
     override_reason: str = ""
+    override_category: str = ""
     officer_name: str = ""
     overridden_at: datetime | None = None
 
@@ -153,6 +154,7 @@ class ResultOut(BaseModel):
 class OverrideCreate(BaseModel):
     requirement_id: int
     verdict: str
+    reason_category: str = ""
     reason: str = ""
     officer_name: str = ""
 
@@ -202,6 +204,7 @@ class AuditEventOut(BaseModel):
     system_verdict: str
     officer_verdict: str
     reason: str
+    reason_category: str
     officer_name: str
     document_id: int | None
     document_name: str

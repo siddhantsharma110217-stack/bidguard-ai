@@ -9,6 +9,7 @@ import { LoadingState } from '../components/ui/LoadingState'
 import { ErrorState } from '../components/ui/ErrorState'
 import { EmptyState } from '../components/ui/EmptyState'
 import { IconLock, IconSpinner } from '../components/icons'
+import { categoryLabel } from '../overrideCategories'
 
 function formatTimestamp(iso: string): string {
   const d = new Date(iso)
@@ -31,7 +32,11 @@ function EventDetail({ event }: { event: AuditEvent }) {
           <span className="text-text-faint">→</span>
           {event.officer_verdict && <VerdictBadge verdict={event.officer_verdict} />}
         </div>
-        <p className="mt-1 max-w-md text-xs text-text-muted">{event.reason}</p>
+        <p className="mt-1 text-xs text-text-muted">
+          Category:{' '}
+          <span className="font-medium text-text">{categoryLabel(event.reason_category)}</span>
+        </p>
+        <p className="mt-0.5 max-w-md text-xs text-text-muted">{event.reason}</p>
       </>
     )
   }

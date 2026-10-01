@@ -21,6 +21,16 @@ from app.models import AuditEvent, Document
 
 GENESIS_HASH = "0" * 64
 
+# Why an officer overrode a verdict: stored code -> label shown to people.
+REASON_CATEGORIES = {
+    "BIDDER_CLARIFICATION": "Clarification received from bidder",
+    "EVIDENCE_ELSEWHERE": "Evidence found elsewhere in the bid",
+    "EXTRACTION_ERROR": "System extraction error",
+    "TENDER_CORRIGENDUM": "Tender corrigendum or amendment",
+    "COMMITTEE_DECISION": "Committee decision",
+    "OTHER": "Other",
+}
+
 # Every column the hash covers, i.e. everything except `hash` itself.
 HASHED_FIELDS = (
     "id",
@@ -41,6 +51,12 @@ HASHED_FIELDS = (
     "prev_hash",
 )
 
+# Fields added after events were already being recorded. They join the
+# hashed content only when non-empty, so events written before the field
+# existed keep verifying. Blanking or adding one later still changes the
+# hashed content, so tampering with it is detected either way.
+OPTIONAL_HASHED_FIELDS = ("reason_category",)
+
 
 def _sha256_json(payload: dict) -> str:
     canonical = json.dumps(
@@ -50,7 +66,11 @@ def _sha256_json(payload: dict) -> str:
 
 
 def compute_event_hash(event: AuditEvent) -> str:
-    return _sha256_json({f: getattr(event, f) for f in HASHED_FIELDS})
+    content = {f: getattr(event, f) for f in HASHED_FIELDS}
+    for f in OPTIONAL_HASHED_FIELDS:
+        if getattr(event, f):
+            content[f] = getattr(event, f)
+    return _sha256_json(content)
 
 
 def utc_timestamp(value: datetime | None = None) -> str:
@@ -85,6 +105,7 @@ def append_event(db: Session, event_type: str, **fields) -> AuditEvent:
             "system_verdict": "",
             "officer_verdict": "",
             "reason": "",
+            "reason_category": "",
             "officer_name": "",
             "document_id": None,
             "document_name": "",

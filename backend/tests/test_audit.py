@@ -6,7 +6,15 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import text
 
-from app.audit import GENESIS_HASH, compute_event_hash, fingerprint_document
+from app.audit import (
+    GENESIS_HASH,
+    HASHED_FIELDS,
+    REASON_CATEGORIES,
+    _sha256_json,
+    append_event,
+    compute_event_hash,
+    fingerprint_document,
+)
 from app.db import engine
 from app.main import app
 from app.models import AuditEvent, Document
@@ -37,12 +45,18 @@ def _req_id(demo, code: str) -> int:
     )
 
 
-def _override(client, demo, code, verdict, reason=REASON, officer="A. Sharma"):
+CATEGORY = "COMMITTEE_DECISION"
+
+
+def _override(
+    client, demo, code, verdict, reason=REASON, officer="A. Sharma", category=CATEGORY
+):
     return client.post(
         f"/api/evaluations/{demo['bid']['id']}/overrides",
         json={
             "requirement_id": _req_id(demo, code),
             "verdict": verdict,
+            "reason_category": category,
             "reason": reason,
             "officer_name": officer,
         },
@@ -150,6 +164,9 @@ def test_override_is_written_to_audit_log(client, demo):
 @pytest.mark.parametrize(
     "kwargs, status, message",
     [
+        ({"category": ""}, 422, "a reason category is required"),
+        ({"category": "   "}, 422, "a reason category is required"),
+        ({"category": "BECAUSE"}, 422, "a reason category is required"),
         ({"reason": "too short"}, 422, "at least 15 characters"),
         ({"reason": "   fourteen ch   "}, 422, "at least 15 characters"),
         ({"officer": "   "}, 422, "officer's name is required"),
@@ -172,7 +189,13 @@ def test_reason_of_exactly_15_characters_is_accepted(client, demo):
 def test_override_for_unevaluated_requirement_is_404(client, demo):
     resp = client.post(
         f"/api/evaluations/{demo['bid']['id']}/overrides",
-        json={"requirement_id": 999999, "verdict": "PASS", "reason": REASON, "officer_name": "X"},
+        json={
+            "requirement_id": 999999,
+            "verdict": "PASS",
+            "reason_category": CATEGORY,
+            "reason": REASON,
+            "officer_name": "X",
+        },
     )
     assert resp.status_code == 404
 
@@ -363,6 +386,7 @@ def test_override_and_audit_for_each_bidder(client, all_bids, name):
         json={
             "requirement_id": target["requirement_id"],
             "verdict": new_verdict,
+            "reason_category": CATEGORY,
             "reason": REASON,
             "officer_name": "A. Sharma",
         },
@@ -402,6 +426,7 @@ def test_overrides_across_all_bidders_form_one_verifiable_chain(client, all_bids
             json={
                 "requirement_id": target["requirement_id"],
                 "verdict": "REVIEW" if target["verdict"] != "REVIEW" else "PASS",
+                "reason_category": CATEGORY,
                 "reason": REASON,
                 "officer_name": "R. Iyer",
             },
@@ -427,3 +452,131 @@ def test_overrides_across_all_bidders_form_one_verifiable_chain(client, all_bids
     finally:
         _restore(db, target["id"], bidder_name=target["bidder_name"])
     assert client.post("/api/audit/verify").json()["intact"] is True
+
+
+# ---------- reason categories ----------
+
+def test_override_with_no_category_is_rejected(client, demo):
+    events_before = len(client.get("/api/audit/events").json())
+    resp = client.post(
+        f"/api/evaluations/{demo['bid']['id']}/overrides",
+        json={
+            "requirement_id": _req_id(demo, "REQ-007"),
+            "verdict": "PASS",
+            "reason": REASON,
+            "officer_name": "A. Sharma",
+        },
+    )
+    assert resp.status_code == 422
+    detail = resp.json()["detail"]
+    assert "reason category is required" in detail.lower()
+    for label in REASON_CATEGORIES.values():
+        assert label in detail
+    assert len(client.get("/api/audit/events").json()) == events_before
+    results = client.get(f"/api/evaluations/{demo['bid']['id']}/results").json()
+    assert not any(r["overridden"] for r in results["results"])
+
+
+def test_category_labels_match_the_form_options():
+    assert list(REASON_CATEGORIES.values()) == [
+        "Clarification received from bidder",
+        "Evidence found elsewhere in the bid",
+        "System extraction error",
+        "Tender corrigendum or amendment",
+        "Committee decision",
+        "Other",
+    ]
+
+
+@pytest.mark.parametrize("category", list(REASON_CATEGORIES))
+def test_category_is_stored_on_result_and_audit_event(client, demo, category):
+    body = _override(client, demo, "REQ-007", "PASS", category=category).json()
+    r = next(x for x in body["results"] if x["requirement_code"] == "REQ-007")
+    assert r["override_category"] == category
+
+    event = client.get("/api/audit/events").json()[-1]
+    assert event["reason_category"] == category
+    assert client.post("/api/audit/verify").json()["intact"] is True
+
+
+def test_category_code_is_case_insensitive(client, demo):
+    body = _override(client, demo, "REQ-007", "PASS", category=" committee_decision ").json()
+    r = next(x for x in body["results"] if x["requirement_code"] == "REQ-007")
+    assert r["override_category"] == "COMMITTEE_DECISION"
+
+
+def test_category_is_part_of_the_event_hash(client, demo, db):
+    _override(client, demo, "REQ-008", "PASS", category="EXTRACTION_ERROR")
+    _override(client, demo, "REQ-009", "PASS")
+    events = client.get("/api/audit/events").json()
+    target = events[-2]
+    assert target["reason_category"] == "EXTRACTION_ERROR"
+
+    for forged in ("COMMITTEE_DECISION", ""):  # change it, or blank it out
+        with engine.begin() as conn:
+            conn.execute(
+                text("UPDATE audit_events SET reason_category = :c WHERE id = :id"),
+                {"c": forged, "id": target["id"]},
+            )
+        try:
+            body = client.post("/api/audit/verify").json()
+            assert body["intact"] is False, forged
+            assert body["first_broken"]["id"] == target["id"]
+        finally:
+            _restore(db, target["id"], reason_category=target["reason_category"])
+
+    assert client.post("/api/audit/verify").json()["intact"] is True
+
+
+def test_events_recorded_before_categories_still_verify(client, demo, db):
+    """An event with no category hashes exactly as it did before the field
+    existed, so existing audit logs stay intact after the upgrade."""
+    event = append_event(
+        db, "VERDICT_OVERRIDE", bidder_name="Legacy Ltd.", reason=REASON, officer_name="Old"
+    )
+    db.commit()
+    legacy_hash = _sha256_json({f: getattr(event, f) for f in HASHED_FIELDS})
+    assert event.hash == legacy_hash
+    assert client.post("/api/audit/verify").json()["intact"] is True
+
+    # Adding a category to it afterwards is tampering, and is detected.
+    with engine.begin() as conn:
+        conn.execute(
+            text("UPDATE audit_events SET reason_category = 'OTHER' WHERE id = :id"),
+            {"id": event.id},
+        )
+    try:
+        body = client.post("/api/audit/verify").json()
+        assert body["intact"] is False
+        assert body["first_broken"]["id"] == event.id
+    finally:
+        _restore(db, event.id, reason_category="")
+
+
+def test_override_made_before_categories_reports_empty_category(client, demo):
+    _override(client, demo, "REQ-007", "PASS")
+    with engine.begin() as conn:
+        conn.execute(
+            text("UPDATE evaluations SET override_category = '' WHERE bid_id = :b"),
+            {"b": demo["bid"]["id"]},
+        )
+    body = client.get(f"/api/evaluations/{demo['bid']['id']}/results").json()
+    r = next(x for x in body["results"] if x["requirement_code"] == "REQ-007")
+    assert r["overridden"] is True
+    assert r["override_category"] == ""  # the UI shows "Not specified"
+
+
+def test_category_survives_re_evaluation(client, demo):
+    _override(client, demo, "REQ-008", "PASS", category="TENDER_CORRIGENDUM")
+    rerun = client.post("/api/evaluations", json={"bid_id": demo["bid"]["id"]}).json()
+    r = next(x for x in rerun["results"] if x["requirement_code"] == "REQ-008")
+    assert r["override_category"] == "TENDER_CORRIGENDUM"
+
+
+def test_withdrawing_an_override_also_requires_and_logs_a_category(client, demo):
+    _override(client, demo, "REQ-007", "PASS")
+    assert _override(client, demo, "REQ-007", "REVIEW", category="").status_code == 422
+    body = _override(client, demo, "REQ-007", "REVIEW", category="BIDDER_CLARIFICATION").json()
+    r = next(x for x in body["results"] if x["requirement_code"] == "REQ-007")
+    assert r["overridden"] is False and r["override_category"] == ""
+    assert client.get("/api/audit/events").json()[-1]["reason_category"] == "BIDDER_CLARIFICATION"

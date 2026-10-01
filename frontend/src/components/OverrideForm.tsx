@@ -3,6 +3,7 @@ import type { FormEvent } from 'react'
 import { ApiError } from '../api/client'
 import type { EvaluationResult, OverrideRequest, Verdict } from '../types'
 import { IconSpinner } from './icons'
+import { REASON_CATEGORIES } from '../overrideCategories'
 
 const MIN_REASON_LENGTH = 15
 
@@ -20,6 +21,7 @@ export function OverrideForm({ result, onSubmit, onCancel }: OverrideFormProps) 
   const [verdict, setVerdict] = useState<Verdict>(
     VERDICTS.find((v) => v !== result.verdict) ?? 'PASS',
   )
+  const [category, setCategory] = useState('')
   const [reason, setReason] = useState('')
   const [officerName, setOfficerName] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -28,8 +30,12 @@ export function OverrideForm({ result, onSubmit, onCancel }: OverrideFormProps) 
   const reasonLength = reason.trim().length
   const reasonOk = reasonLength >= MIN_REASON_LENGTH
   const nameOk = officerName.trim().length > 0
+  const categoryOk = category !== ''
   const changed = verdict !== result.verdict
-  const canSubmit = reasonOk && nameOk && changed && !submitting
+  const canSubmit = categoryOk && reasonOk && nameOk && changed && !submitting
+  const placeholder =
+    REASON_CATEGORIES.find((c) => c.code === category)?.placeholder ??
+    'Choose a reason category first'
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
@@ -40,6 +46,7 @@ export function OverrideForm({ result, onSubmit, onCancel }: OverrideFormProps) 
       await onSubmit({
         requirement_id: result.requirement_id,
         verdict,
+        reason_category: category,
         reason: reason.trim(),
         officer_name: officerName.trim(),
       })
@@ -95,12 +102,34 @@ export function OverrideForm({ result, onSubmit, onCancel }: OverrideFormProps) 
       </div>
 
       <label className="flex flex-col gap-1">
-        <span className="text-xs font-medium text-text-muted">Reason for override</span>
+        <span className="text-xs font-medium text-text-muted">Reason category</span>
+        <select
+          value={category}
+          onChange={(e) => setCategory(e.target.value)}
+          required
+          className={`${inputClass} sm:max-w-sm`}
+        >
+          <option value="" disabled>
+            Select a reason category…
+          </option>
+          {REASON_CATEGORIES.map((c) => (
+            <option key={c.code} value={c.code}>
+              {c.label}
+            </option>
+          ))}
+        </select>
+        {!categoryOk && <span className="text-xs text-review">A reason category is required</span>}
+      </label>
+
+      <label className="flex flex-col gap-1">
+        <span className="text-xs font-medium text-text-muted">
+          Details and reference (letter no., document and page, meeting ref)
+        </span>
         <textarea
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           rows={3}
-          placeholder="Explain why the system's verdict is being changed"
+          placeholder={placeholder}
           className={inputClass}
         />
         <span className={`text-xs ${reasonOk ? 'text-text-faint' : 'text-review'}`}>

@@ -36,10 +36,12 @@ def get_db():
 # Columns added after the first release. `create_all` never alters existing
 # tables, so add them in place on databases created by an older build.
 _LATE_COLUMNS = {
+    "audit_events": {"reason_category": "VARCHAR DEFAULT ''"},
     "documents": {"sha256": "VARCHAR DEFAULT ''"},
     "evaluations": {
         "officer_verdict": "VARCHAR",
         "override_reason": "TEXT DEFAULT ''",
+        "override_category": "VARCHAR DEFAULT ''",
         "officer_name": "VARCHAR DEFAULT ''",
         "overridden_at": "DATETIME",
     },

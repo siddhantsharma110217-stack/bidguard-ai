@@ -37,7 +37,7 @@ def _document_out(doc: Document) -> DocumentOut:
     )
 
 
-def _contact_out(docs: list[Document]) -> list[ContactFieldOut]:
+def contact_details(docs: list[Document]) -> list[ContactFieldOut]:
     """Bidder contact details, each taken from the first document supplying it.
 
     Documents are searched in id order, matching how the evaluator resolves
@@ -105,5 +105,5 @@ def get_bid_documents(bid_id: int, db: Session = Depends(get_db)):
         tender=TenderOut.model_validate(bid.tender),
         total=len(docs),
         documents=[_document_out(d) for d in docs],
-        contact=_contact_out(docs),
+        contact=contact_details(docs),
     )

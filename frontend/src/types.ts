@@ -206,3 +206,38 @@ export interface AuditVerification {
 export interface ApiErrorBody {
   detail?: string
 }
+
+export type RedFlagKind = 'SHARED_CONTACT' | 'SIMILAR_DOCUMENTS' | 'INCONSISTENT_TREATMENT'
+export type RedFlagCategory = 'POSSIBLE_COLLUSION' | 'INCONSISTENT_TREATMENT'
+
+export interface RedFlagEvidence {
+  bid_id: number
+  bidder_name: string
+  label: string
+  value: string
+  source_document: string
+  source_page: number
+  detail: string
+}
+
+export interface RedFlag {
+  kind: RedFlagKind
+  category: RedFlagCategory
+  title: string
+  summary: string
+  bidders: { bid_id: number; bidder_name: string }[]
+  evidence: RedFlagEvidence[]
+  similarity: number | null
+  requirement_code: string
+}
+
+export interface RedFlagReport {
+  tender: Tender
+  /** Always shown with the flags: "red flag for review — not proof of wrongdoing". */
+  disclaimer: string
+  bidders: { bid_id: number; bidder_name: string; evaluated: boolean }[]
+  similarity_threshold: number
+  min_similarity_text_length: number
+  total_flags: number
+  flags: RedFlag[]
+}

@@ -1,5 +1,9 @@
 """Deterministic sample tender + four bidder packages for the demo.
 
+SAMPLE DATA ONLY. Every company, person, address, phone number, email and
+bank account in this module is fictional and exists solely to exercise the
+demo. Any resemblance to a real entity is coincidental.
+
 Everything here is fixed data — loading the demo twice produces byte-identical
 requirements, documents and (therefore) evaluation results.
 
@@ -20,6 +24,11 @@ Every bidder's Commercial Bid also carries contact fields (`CONTACT_FIELDS`).
 Apex Infotech and Crestline Computers declare the SAME phone number and bank
 account while presenting as unrelated firms — a common indicator of bid
 rigging / cover bidding that a reviewing officer should be able to spot.
+The Red Flags page (`app.redflags`) surfaces exactly these two shared details;
+TechNova and Bharat Digital share nothing and must stay unflagged.
+
+TechNova (45 days) and Apex (40 days) both FAIL the same delivery rule
+(REQ-008). Overriding only one of them produces an inconsistent-treatment flag.
 """
 
 TENDER = {
@@ -230,7 +239,10 @@ CONTACT_FIELDS = {
     "bank_account": "Bank Account",
 }
 
-# Shared by Apex Infotech and Crestline Computers (see module docstring).
+# SAMPLE DATA: fictional contact details, deliberately shared by Apex
+# Infotech and Crestline Computers so the Red Flags page has a real
+# collusion indicator to show (see module docstring). Do not reuse them
+# for any other bidder: TechNova and Bharat Digital must stay clean.
 _SHARED_PHONE = "+91 98110 36524"
 _SHARED_BANK_ACCOUNT = "State Bank of India, A/c No. 39104458821, IFSC SBIN0011235"
 

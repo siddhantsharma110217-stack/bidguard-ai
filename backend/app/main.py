@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import audit, bids, demo, evaluations, tenders
+from app.api import audit, bids, demo, evaluations, redflags, tenders
 from app.config import settings
 from app.db import init_db
 
@@ -39,3 +39,4 @@ app.include_router(bids.router)
 app.include_router(evaluations.router)
 app.include_router(demo.router)
 app.include_router(audit.router)
+app.include_router(redflags.router)

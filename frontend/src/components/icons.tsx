@@ -84,6 +84,15 @@ export function IconLock(props: SVGProps<SVGSVGElement>) {
   )
 }
 
+export function IconFlag(props: SVGProps<SVGSVGElement>) {
+  return (
+    <Base {...props}>
+      <path d="M5 21V4" />
+      <path d="M5 4h11l-2 4 2 4H5" />
+    </Base>
+  )
+}
+
 export function IconBarChart(props: SVGProps<SVGSVGElement>) {
   return (
     <Base {...props}>

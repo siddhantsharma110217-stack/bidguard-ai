@@ -9,6 +9,7 @@ import type {
   EvaluationResults,
   HealthStatus,
   OverrideRequest,
+  RedFlagReport,
   RequirementList,
   Tender,
 } from '../types'
@@ -114,4 +115,8 @@ export function listAuditEvents(): Promise<AuditEvent[]> {
 
 export function verifyAuditChain(): Promise<AuditVerification> {
   return request<AuditVerification>('/api/audit/verify', { method: 'POST' })
+}
+
+export function getRedFlags(tenderId: number): Promise<RedFlagReport> {
+  return request<RedFlagReport>(`/api/tenders/${tenderId}/red-flags`)
 }

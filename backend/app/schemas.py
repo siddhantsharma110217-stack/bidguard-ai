@@ -223,3 +223,45 @@ class AuditVerifyOut(BaseModel):
     head_hash: str
     first_broken: BrokenEventOut | None
     checked_at: str
+
+
+class RedFlagBidderOut(BaseModel):
+    bid_id: int
+    bidder_name: str
+
+
+class RedFlagEvidenceOut(BaseModel):
+    bid_id: int
+    bidder_name: str
+    label: str
+    value: str
+    source_document: str
+    source_page: int
+    detail: str
+
+
+class RedFlagOut(BaseModel):
+    kind: str  # SHARED_CONTACT | SIMILAR_DOCUMENTS | INCONSISTENT_TREATMENT
+    category: str  # POSSIBLE_COLLUSION | INCONSISTENT_TREATMENT
+    title: str
+    summary: str
+    bidders: list[RedFlagBidderOut]
+    evidence: list[RedFlagEvidenceOut]
+    similarity: float | None
+    requirement_code: str
+
+
+class ComparedBidderOut(BaseModel):
+    bid_id: int
+    bidder_name: str
+    evaluated: bool
+
+
+class RedFlagReportOut(BaseModel):
+    tender: TenderOut
+    disclaimer: str
+    bidders: list[ComparedBidderOut]
+    similarity_threshold: float
+    min_similarity_text_length: int
+    total_flags: int
+    flags: list[RedFlagOut]

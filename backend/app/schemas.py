@@ -69,6 +69,41 @@ class DocumentOut(BaseModel):
     page_count: int
     has_text_layer: bool
     extracted_field_count: int = 0
+    sha256: str = ""
+    # UPLOAD for user-uploaded PDFs, SAMPLE for seeded demo documents.
+    source: str = "SAMPLE"
+    file_size: int = 0
+    pages_without_text: list[int] = []
+    text_status: str = ""  # human-readable, e.g. "No extractable text — OCR not available"
+    extraction_mode: str = ""  # AI | RULES | RULES_FALLBACK | "" (pre-extracted demo data)
+    extraction_label: str = ""
+    extraction_note: str = ""
+    # Uploaded PDFs: a digital signature field is present (None = not checked,
+    # e.g. seeded documents). The signature itself is NOT validated.
+    has_signature_field: bool | None = None
+    # "Re-verify file": UNCHANGED | CHANGED | FILE_MISSING ("" = never run)
+    reverifiable: bool = False
+    last_reverify_status: str = ""
+    last_reverified_at: datetime | None = None
+    # Issuer verification of this document from the latest evaluation
+    # ("" = not checked yet / not a verified document type).
+    verification_status: str = ""
+    verification_reason: str = ""
+
+    @field_serializer("last_reverified_at")
+    def _ser_last_reverified_at(self, value: datetime | None) -> str | None:
+        return _as_utc(value)
+
+
+class ContactFieldOut(BaseModel):
+    """One bidder contact detail, with the document it was extracted from."""
+
+    field: str
+    label: str
+    value: str
+    source_document: str
+    source_document_id: int
+    source_page: int
 
 
 class BidOut(BaseModel):
@@ -95,6 +130,7 @@ class BidDocumentsOut(BaseModel):
     tender: TenderOut
     total: int
     documents: list[DocumentOut]
+    contact: list[ContactFieldOut] = []
 
 
 class BidCreate(BaseModel):
@@ -124,6 +160,43 @@ class ResultOut(BaseModel):
     recommended_action: str
     decision_source: str
     rule_trace: dict
+    # How the evidence was obtained: AI | RULES | RULES_FALLBACK, or "" for
+    # the seeded demo data (pre-extracted). citation_status is set in AI mode:
+    # VERIFIED | UNSUPPORTED | VALUE_NOT_IN_QUOTE.
+    extraction_method: str = ""
+    citation_status: str = ""
+    # `verdict`/`score` are the effective values; these describe any override.
+    system_verdict: str
+    overridden: bool = False
+    officer_verdict: str | None = None
+    override_reason: str = ""
+    override_category: str = ""
+    officer_name: str = ""
+    officer_username: str = ""
+    # Document trust layer (separate from the compliance verdict).
+    # `rule_verdict` is the rule engine's verdict before verification.
+    verification_required: bool = False
+    verification_status: str = "NOT_APPLICABLE"
+    verification_reason: str = ""
+    verification_source: str = ""
+    verification_checked_at: str = ""
+    verification_details: dict = {}
+    rule_verdict: str = ""
+    overridden_at: datetime | None = None
+
+    @field_serializer("overridden_at")
+    def _ser_overridden_at(self, value: datetime | None) -> str | None:
+        return _as_utc(value)
+
+
+class OverrideCreate(BaseModel):
+    """The officer is always the logged-in user; any officer name a client
+    sends is ignored (unknown fields are dropped)."""
+
+    requirement_id: int
+    verdict: str
+    reason_category: str = ""
+    reason: str = ""
 
 
 class SummaryOut(BaseModel):
@@ -154,3 +227,133 @@ class DashboardOut(BaseModel):
     demo_loaded: bool
     demo_tender_id: int | None
     demo_bid_id: int | None
+    demo_bid_ids: list[int] = []
+
+
+class AuditEventOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    event_type: str
+    timestamp: str
+    bid_id: int | None
+    bidder_name: str
+    requirement_id: int | None
+    requirement_code: str
+    requirement_title: str
+    system_verdict: str
+    officer_verdict: str
+    reason: str
+    reason_category: str
+    officer_name: str
+    officer_username: str
+    check_status: str
+    check_source: str
+    document_id: int | None
+    document_name: str
+    document_sha256: str
+    prev_hash: str
+    hash: str
+
+
+class BrokenEventOut(BaseModel):
+    id: int
+    position: int
+    reason: str
+
+
+class AuditVerifyOut(BaseModel):
+    intact: bool
+    total_events: int
+    verified_events: int
+    head_hash: str
+    first_broken: BrokenEventOut | None
+    checked_at: str
+
+
+class RedFlagBidderOut(BaseModel):
+    bid_id: int
+    bidder_name: str
+
+
+class RedFlagEvidenceOut(BaseModel):
+    bid_id: int
+    bidder_name: str
+    label: str
+    value: str
+    source_document: str
+    source_page: int
+    detail: str
+
+
+class RedFlagOut(BaseModel):
+    kind: str  # SHARED_CONTACT | SIMILAR_DOCUMENTS | INCONSISTENT_TREATMENT
+    category: str  # POSSIBLE_COLLUSION | INCONSISTENT_TREATMENT
+    title: str
+    summary: str
+    bidders: list[RedFlagBidderOut]
+    evidence: list[RedFlagEvidenceOut]
+    similarity: float | None
+    requirement_code: str
+
+
+class ComparedBidderOut(BaseModel):
+    bid_id: int
+    bidder_name: str
+    evaluated: bool
+
+
+class RedFlagReportOut(BaseModel):
+    tender: TenderOut
+    disclaimer: str
+    bidders: list[ComparedBidderOut]
+    similarity_threshold: float
+    min_similarity_text_length: int
+    total_flags: int
+    flags: list[RedFlagOut]
+
+
+class UploadResultOut(BaseModel):
+    bid: BidOut
+    tender_id: int
+    extraction_mode: str
+    extraction_label: str
+    extraction_note: str
+    documents: list[DocumentOut]
+
+
+class UserOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    username: str
+    full_name: str
+    designation: str
+    role: str  # OFFICER | REVIEWER
+
+
+class LoginIn(BaseModel):
+    username: str
+    password: str
+
+
+class LoginOut(BaseModel):
+    token: str
+    expires_at: int  # Unix timestamp
+    user: UserOut
+
+
+class DemoAccountOut(BaseModel):
+    username: str
+    full_name: str
+    designation: str
+    role: str
+    demo_password: str | None
+
+
+class ReverifyOut(BaseModel):
+    document_id: int
+    status: str  # UNCHANGED | CHANGED | FILE_MISSING
+    label: str
+    recorded_sha256: str
+    current_sha256: str
+    checked_at: str

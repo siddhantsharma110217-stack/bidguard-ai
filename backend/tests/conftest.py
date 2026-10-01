@@ -7,9 +7,17 @@ Environment variables take precedence over `.env` in pydantic-settings.
 
 import os
 import pathlib
+import shutil
+import tempfile
 
 _TEST_DB = pathlib.Path(__file__).resolve().parent / "bidguard_test.db"
 os.environ["DATABASE_URL"] = f"sqlite:///{_TEST_DB.as_posix()}"
+# Never make real API calls from tests, even if a developer's .env has a key:
+# AI extraction is exercised only through fake providers.
+os.environ["ANTHROPIC_API_KEY"] = ""
+# Uploaded files go to a throwaway folder, not backend/storage.
+_TEST_STORAGE = tempfile.mkdtemp(prefix="bidguard-test-storage-")
+os.environ["STORAGE_DIR"] = _TEST_STORAGE
 
 import pytest  # noqa: E402
 
@@ -25,6 +33,7 @@ def _fresh_database():
     engine.dispose()
     if _TEST_DB.exists():
         _TEST_DB.unlink()
+    shutil.rmtree(_TEST_STORAGE, ignore_errors=True)
 
 
 @pytest.fixture()

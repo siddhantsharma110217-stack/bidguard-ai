@@ -1,11 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app.auth import current_user, require_officer
 from app.db import get_db
 from app.models import Requirement, Tender
 from app.schemas import RequirementListOut, RequirementOut, TenderOut
 
-router = APIRouter(prefix="/api/tenders", tags=["tenders"])
+router = APIRouter(
+    prefix="/api/tenders", tags=["tenders"], dependencies=[Depends(current_user)]
+)
 
 
 def _requirement_out(req: Requirement) -> RequirementOut:
@@ -36,7 +39,7 @@ def list_tenders(db: Session = Depends(get_db)):
     return db.query(Tender).order_by(Tender.id).all()
 
 
-@router.post("", response_model=TenderOut, status_code=201)
+@router.post("", response_model=TenderOut, status_code=201, dependencies=[Depends(require_officer)])
 def create_tender(payload: dict, db: Session = Depends(get_db)):
     title = (payload.get("title") or "").strip()
     if not title:

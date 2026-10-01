@@ -8,6 +8,8 @@ import {
   IconActivity,
   IconShieldCheck,
   IconBarChart,
+  IconLock,
+  IconFlag,
 } from '../icons'
 
 interface NavItem {
@@ -24,6 +26,8 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Evaluation', to: '/evaluation', icon: IconActivity },
   { label: 'Compliance', to: '/compliance', icon: IconShieldCheck },
   { label: 'Reports', to: '/reports', icon: IconBarChart },
+  { label: 'Red Flags', to: '/red-flags', icon: IconFlag },
+  { label: 'Audit', to: '/audit', icon: IconLock },
 ]
 
 export function Sidebar() {

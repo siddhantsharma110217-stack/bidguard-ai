@@ -1,12 +1,40 @@
-"""Deterministic sample tender + bidder package for the demo.
+"""Deterministic sample tender + four bidder packages for the demo.
+
+SAMPLE DATA ONLY. Every company, person, address, phone number, email and
+bank account in this module is fictional and exists solely to exercise the
+demo. Any resemblance to a real entity is coincidental.
 
 Everything here is fixed data — loading the demo twice produces byte-identical
 requirements, documents and (therefore) evaluation results.
 
-The bidder package is deliberately constructed to yield a MIXED result so the
-evaluator is visibly doing real work:
-    7 PASS · 1 REVIEW (ambiguous BIS certificate) · 1 FAIL (delivery 45 > 30)
-    · 1 MISSING (no OEM authorisation document)
+Each bidder package is deliberately constructed so the evaluator is visibly
+doing real work and the bidders differ from one another:
+
+  TechNova Systems      7 PASS · 1 REVIEW (ambiguous BIS certificate)
+                        · 1 FAIL (delivery 45 > 30) · 1 MISSING (no OEM MAF)
+                        -> 76.0 compliance, risk 53 HIGH, NON-RESPONSIVE
+  Apex Infotech         8 PASS · 1 REVIEW · 1 FAIL (delivery 40 > 30)
+                        -> 86.0 compliance, risk 33 MEDIUM, NON-RESPONSIVE
+  Bharat Digital        9 PASS · 1 REVIEW
+                        -> 96.0 compliance, risk 8 LOW, RESPONSIVE
+  Crestline Computers   9 PASS · 1 MISSING (desirable energy rating)
+                        -> 90.0 compliance, risk 20 LOW, RESPONSIVE
+
+Every bidder's Commercial Bid also carries contact fields (`CONTACT_FIELDS`).
+Apex Infotech and Crestline Computers declare the SAME phone number and bank
+account while presenting as unrelated firms — a common indicator of bid
+rigging / cover bidding that a reviewing officer should be able to spot.
+BIS registration (REQ-007) is also checked against the fictional issuer
+registry (app.verification.registry): TechNova VERIFIED (its REVIEW, from an
+unreadable validity date, is unchanged), Bharat UNVERIFIED (no record) and
+Apex VERIFICATION_FAILED (number differs from the issuer record) both turn
+their rule PASS into REVIEW, Crestline VERIFIED.
+
+The Red Flags page (`app.redflags`) surfaces exactly these two shared details;
+TechNova and Bharat Digital share nothing and must stay unflagged.
+
+TechNova (45 days) and Apex (40 days) both FAIL the same delivery rule
+(REQ-008). Overriding only one of them produces an inconsistent-treatment flag.
 """
 
 TENDER = {
@@ -145,6 +173,9 @@ REQUIREMENTS = [
             "field": "bis_registration_no",
             "expected_display": "Valid BIS registration certificate",
         },
+        # The one requirement checked against the issuer's record
+        # (app.verification). Every other requirement defaults to False.
+        "verification_required": True,
         "expected_doc_types": ["BIS_CERTIFICATE"],
         "weight": 5,
         "source_page": 7,
@@ -203,13 +234,63 @@ REQUIREMENTS = [
     },
 ]
 
+
 # ---------------------------------------------------------------------------
-# Bidder package — TechNova Systems Pvt. Ltd.
+# Bidder contact details. These are extracted from each bidder's Commercial
+# Bid like any other field; no requirement rule reads them, so they never
+# affect a compliance verdict. Keys map to the label shown to the officer.
 # ---------------------------------------------------------------------------
 
-BIDDER_NAME = "TechNova Systems Pvt. Ltd."
+CONTACT_FIELDS = {
+    "bidder_email": "Email",
+    "bidder_phone": "Phone",
+    "bidder_address": "Registered Address",
+    "bank_account": "Bank Account",
+}
 
-DOCUMENTS = [
+# SAMPLE DATA: fictional contact details, deliberately shared by Apex
+# Infotech and Crestline Computers so the Red Flags page has a real
+# collusion indicator to show (see module docstring). Do not reuse them
+# for any other bidder: TechNova and Bharat Digital must stay clean.
+_SHARED_PHONE = "+91 98110 36524"
+_SHARED_BANK_ACCOUNT = "State Bank of India, A/c No. 39104458821, IFSC SBIN0011235"
+
+
+def _contact(email: str, phone: str, address: str, bank_account: str, *, page: int) -> dict:
+    """Contact block as extracted from a Commercial Bid's bidder-details page."""
+    return {
+        "bidder_email": {
+            "value": email,
+            "page": page,
+            "confidence": 0.98,
+            "snippet": f"E-mail: {email}",
+        },
+        "bidder_phone": {
+            "value": phone,
+            "page": page,
+            "confidence": 0.97,
+            "snippet": f"Contact No.: {phone}",
+        },
+        "bidder_address": {
+            "value": address,
+            "page": page,
+            "confidence": 0.95,
+            "snippet": f"Registered Office: {address}",
+        },
+        "bank_account": {
+            "value": bank_account,
+            "page": page,
+            "confidence": 0.96,
+            "snippet": f"Bank details for EMD refund / payment: {bank_account}",
+        },
+    }
+
+
+# ---------------------------------------------------------------------------
+# Bidder 1 — TechNova Systems Pvt. Ltd.  (7 PASS · 1 REVIEW · 1 FAIL · 1 MISSING)
+# ---------------------------------------------------------------------------
+
+TECHNOVA_DOCUMENTS = [
     {
         "original_filename": "Technical_Bid.pdf",
         "doc_type": "TECHNICAL_BID",
@@ -291,6 +372,13 @@ DOCUMENTS = [
                 "confidence": 0.95,
                 "snippet": "Delivery Schedule: Complete delivery within 45 days from the date of Purchase Order.",
             },
+            **_contact(
+                email="tenders@technovasystems.in",
+                phone="+91 80 4718 2290",
+                address="No. 14, 2nd Floor, Outer Ring Road, Marathahalli, Bengaluru, Karnataka 560037",
+                bank_account="HDFC Bank, A/c No. 50200047712093, IFSC HDFC0000523",
+                page=1,
+            ),
         },
     },
     {
@@ -302,16 +390,439 @@ DOCUMENTS = [
         "has_text_layer": False,
         "fields": {
             "bis_registration_no": {
-                "value": "R-4119____ (partially legible)",
+                "value": "R-41190527",
                 "page": 1,
                 "confidence": 0.42,
                 "ambiguous": True,
                 "ambiguity_reason": (
-                    "the uploaded scan is low-resolution, the registration number is only "
-                    "partially legible and the validity date is not readable"
+                    "the uploaded scan is low-resolution and the validity date is not "
+                    "readable, so the certificate's validity cannot be confirmed"
                 ),
-                "snippet": "BIS Registration No. R-4119____  |  Valid upto: ____/____  (illegible)",
+                "snippet": "BIS Registration No. R-41190527  |  Valid upto: ____/____  (illegible)",
+            },
+            "certificate_holder": {
+                "value": "TechNova Systems Pvt. Ltd.",
+                "page": 1,
+                "confidence": 0.95,
+                "snippet": "Registered to: TechNova Systems Pvt. Ltd.",
             },
         },
     },
 ]
+
+# ---------------------------------------------------------------------------
+# Bidder 2 — Apex Infotech Solutions  (9 PASS · 1 FAIL: delivery 40 > 30)
+# Shares its phone number and bank account with Crestline Computers.
+# ---------------------------------------------------------------------------
+
+APEX_DOCUMENTS = [
+    {
+        "original_filename": "Technical_Bid.pdf",
+        "doc_type": "TECHNICAL_BID",
+        "doc_type_confidence": 0.96,
+        "classified_by": "SIGNATURE",
+        "page_count": 5,
+        "has_text_layer": True,
+        "fields": {
+            "processor": {
+                "value": "Intel Core i5-1335U",
+                "page": 2,
+                "confidence": 0.97,
+                "snippet": "CPU: Intel Core i5-1335U (13th Gen, 10 cores, up to 4.6 GHz)",
+            },
+            "ram_gb": {
+                "value": "16 GB DDR4",
+                "numeric": 16,
+                "page": 2,
+                "confidence": 0.97,
+                "snippet": "RAM: 16 GB DDR4 3200 MHz (2 x 8 GB)",
+            },
+            "storage_gb": {
+                "value": "512 GB SSD",
+                "numeric": 512,
+                "page": 2,
+                "confidence": 0.96,
+                "snippet": "Storage: 512 GB M.2 PCIe SSD",
+            },
+            "display_inch": {
+                "value": "14 inch FHD anti-glare",
+                "numeric": 14,
+                "page": 2,
+                "confidence": 0.96,
+                "snippet": "Screen: 14.0\" FHD (1920 x 1080) anti-glare, 300 nits",
+            },
+            "operating_system": {
+                "value": "Windows 11 Professional (OEM)",
+                "page": 3,
+                "confidence": 0.98,
+                "snippet": "OS: Genuine Windows 11 Professional, factory pre-installed with OEM licence",
+            },
+            "energy_rating": {
+                "value": "BEE 4-star rated",
+                "page": 4,
+                "confidence": 0.90,
+                "snippet": "Energy: BEE 4-star rated (certificate enclosed)",
+            },
+        },
+    },
+    {
+        "original_filename": "Warranty_Certificate.pdf",
+        "doc_type": "WARRANTY_CERTIFICATE",
+        "doc_type_confidence": 0.95,
+        "classified_by": "SIGNATURE",
+        "page_count": 1,
+        "has_text_layer": True,
+        "fields": {
+            "warranty_years": {
+                "value": "3 years onsite OEM warranty",
+                "numeric": 3,
+                "page": 1,
+                "confidence": 0.96,
+                "snippet": "The OEM provides 3 (three) years onsite comprehensive warranty on all quoted units.",
+            },
+        },
+    },
+    {
+        "original_filename": "Commercial_Bid.pdf",
+        "doc_type": "COMMERCIAL_BID",
+        "doc_type_confidence": 0.95,
+        "classified_by": "SIGNATURE",
+        "page_count": 3,
+        "has_text_layer": True,
+        "fields": {
+            "delivery_days": {
+                "value": "40 days from PO",
+                "numeric": 40,
+                "page": 2,
+                "confidence": 0.96,
+                "snippet": "Delivery Period: Supply shall be completed within 40 (forty) days of receipt of Purchase Order.",
+            },
+            **_contact(
+                email="bids@apexinfotech.co.in",
+                phone=_SHARED_PHONE,
+                address="B-42, Sector 63, Noida, Uttar Pradesh 201301",
+                bank_account=_SHARED_BANK_ACCOUNT,
+                page=1,
+            ),
+        },
+    },
+    {
+        "original_filename": "BIS_Certificate.pdf",
+        "doc_type": "BIS_CERTIFICATE",
+        "doc_type_confidence": 0.93,
+        "classified_by": "SIGNATURE",
+        "page_count": 1,
+        "has_text_layer": True,
+        "fields": {
+            "bis_registration_no": {
+                "value": "R-41087632",
+                "page": 1,
+                "confidence": 0.95,
+                "snippet": "BIS Registration No. R-41087632  |  Valid upto: 31/03/2028",
+            },
+            "certificate_holder": {
+                "value": "Apex Infotech Solutions",
+                "page": 1,
+                "confidence": 0.95,
+                "snippet": "Registered to: Apex Infotech Solutions",
+            },
+        },
+    },
+    {
+        "original_filename": "OEM_Authorization_Form.pdf",
+        "doc_type": "OEM_AUTHORIZATION",
+        "doc_type_confidence": 0.94,
+        "classified_by": "SIGNATURE",
+        "page_count": 1,
+        "has_text_layer": True,
+        "fields": {
+            "oem_authorization_ref": {
+                "value": "MAF/2026/GEM-4471902/0187",
+                "page": 1,
+                "confidence": 0.94,
+                "snippet": "Manufacturer Authorization Form Ref. MAF/2026/GEM-4471902/0187 issued for Bid No. GEM/2026/B/4471902.",
+            },
+        },
+    },
+]
+
+# ---------------------------------------------------------------------------
+# Bidder 3 — Bharat Digital Technologies Pvt. Ltd.  (10 PASS)
+# ---------------------------------------------------------------------------
+
+BHARAT_DOCUMENTS = [
+    {
+        "original_filename": "Technical_Bid.pdf",
+        "doc_type": "TECHNICAL_BID",
+        "doc_type_confidence": 0.98,
+        "classified_by": "SIGNATURE",
+        "page_count": 7,
+        "has_text_layer": True,
+        "fields": {
+            "processor": {
+                "value": "Intel Core i7-1355U",
+                "page": 2,
+                "confidence": 0.97,
+                "snippet": "Processor: Intel Core i7-1355U (13th Gen, 10 cores, up to 5.0 GHz)",
+            },
+            "ram_gb": {
+                "value": "16 GB DDR5",
+                "numeric": 16,
+                "page": 2,
+                "confidence": 0.98,
+                "snippet": "Memory: 16 GB DDR5 5200 MHz, dual channel",
+            },
+            "storage_gb": {
+                "value": "1 TB NVMe SSD",
+                "numeric": 1024,
+                "page": 2,
+                "confidence": 0.97,
+                "snippet": "Storage: 1 TB PCIe Gen4 NVMe SSD",
+            },
+            "display_inch": {
+                "value": "14 inch FHD+ anti-glare",
+                "numeric": 14,
+                "page": 3,
+                "confidence": 0.96,
+                "snippet": "Display: 14\" FHD+ (1920 x 1200) IPS anti-glare, 400 nits",
+            },
+            "operating_system": {
+                "value": "Windows 11 Pro (OEM licence)",
+                "page": 3,
+                "confidence": 0.99,
+                "snippet": "Operating System: Windows 11 Pro, pre-installed, OEM licence key embedded in BIOS",
+            },
+            "energy_rating": {
+                "value": "ENERGY STAR 8.0 certified",
+                "page": 6,
+                "confidence": 0.93,
+                "snippet": "Certifications: ENERGY STAR 8.0, EPEAT Gold, RoHS",
+            },
+        },
+    },
+    {
+        "original_filename": "Warranty_Certificate.pdf",
+        "doc_type": "WARRANTY_CERTIFICATE",
+        "doc_type_confidence": 0.96,
+        "classified_by": "SIGNATURE",
+        "page_count": 2,
+        "has_text_layer": True,
+        "fields": {
+            "warranty_years": {
+                "value": "5 years comprehensive onsite",
+                "numeric": 5,
+                "page": 1,
+                "confidence": 0.97,
+                "snippet": "Warranty: 5 (five) years comprehensive onsite, next-business-day service, parts and labour included.",
+            },
+        },
+    },
+    {
+        "original_filename": "Commercial_Bid.pdf",
+        "doc_type": "COMMERCIAL_BID",
+        "doc_type_confidence": 0.97,
+        "classified_by": "SIGNATURE",
+        "page_count": 3,
+        "has_text_layer": True,
+        "fields": {
+            "delivery_days": {
+                "value": "21 days from PO",
+                "numeric": 21,
+                "page": 2,
+                "confidence": 0.97,
+                "snippet": "Delivery: All 250 units shall be delivered within 21 days from the date of Purchase Order.",
+            },
+            **_contact(
+                email="procurement@bharatdigital.in",
+                phone="+91 22 6619 4400",
+                address="Unit 7, Andheri Industrial Estate, Andheri (East), Mumbai, Maharashtra 400093",
+                bank_account="ICICI Bank, A/c No. 000405117386, IFSC ICIC0000004",
+                page=1,
+            ),
+        },
+    },
+    {
+        "original_filename": "BIS_Certificate.pdf",
+        "doc_type": "BIS_CERTIFICATE",
+        "doc_type_confidence": 0.95,
+        "classified_by": "SIGNATURE",
+        "page_count": 1,
+        "has_text_layer": True,
+        "fields": {
+            "bis_registration_no": {
+                "value": "R-41052219",
+                "page": 1,
+                "confidence": 0.96,
+                "snippet": "BIS Registration No. R-41052219  |  Valid upto: 30/09/2027",
+            },
+            "certificate_holder": {
+                "value": "Bharat Digital Technologies Pvt. Ltd.",
+                "page": 1,
+                "confidence": 0.95,
+                "snippet": "Registered to: Bharat Digital Technologies Pvt. Ltd.",
+            },
+        },
+    },
+    {
+        "original_filename": "OEM_Authorization_Form.pdf",
+        "doc_type": "OEM_AUTHORIZATION",
+        "doc_type_confidence": 0.95,
+        "classified_by": "SIGNATURE",
+        "page_count": 1,
+        "has_text_layer": True,
+        "fields": {
+            "oem_authorization_ref": {
+                "value": "MAF/2026/GEM-4471902/0142",
+                "page": 1,
+                "confidence": 0.95,
+                "snippet": "Manufacturer Authorization Form Ref. MAF/2026/GEM-4471902/0142 issued for Bid No. GEM/2026/B/4471902.",
+            },
+        },
+    },
+]
+
+# ---------------------------------------------------------------------------
+# Bidder 4 — Crestline Computers LLP  (9 PASS · 1 MISSING: desirable energy rating)
+# Shares its phone number and bank account with Apex Infotech.
+# ---------------------------------------------------------------------------
+
+CRESTLINE_DOCUMENTS = [
+    {
+        "original_filename": "Technical_Bid.pdf",
+        "doc_type": "TECHNICAL_BID",
+        "doc_type_confidence": 0.95,
+        "classified_by": "SIGNATURE",
+        "page_count": 4,
+        "has_text_layer": True,
+        "fields": {
+            "processor": {
+                "value": "AMD Ryzen 5 7530U",
+                "page": 2,
+                "confidence": 0.96,
+                "snippet": "Processor: AMD Ryzen 5 7530U (6 cores, up to 4.5 GHz)",
+            },
+            "ram_gb": {
+                "value": "16 GB DDR4",
+                "numeric": 16,
+                "page": 2,
+                "confidence": 0.97,
+                "snippet": "Memory: 16 GB DDR4 3200 MHz onboard",
+            },
+            "storage_gb": {
+                "value": "512 GB NVMe SSD",
+                "numeric": 512,
+                "page": 2,
+                "confidence": 0.96,
+                "snippet": "Storage: 512 GB NVMe M.2 SSD",
+            },
+            "display_inch": {
+                "value": "15.6 inch FHD anti-glare",
+                "numeric": 15.6,
+                "page": 2,
+                "confidence": 0.95,
+                "snippet": "Display: 15.6\" FHD anti-glare LED backlit",
+            },
+            "operating_system": {
+                "value": "Windows 11 Pro (OEM licence)",
+                "page": 3,
+                "confidence": 0.98,
+                "snippet": "Operating System: Windows 11 Pro 64-bit with OEM licence",
+            },
+        },
+    },
+    {
+        "original_filename": "Warranty_Certificate.pdf",
+        "doc_type": "WARRANTY_CERTIFICATE",
+        "doc_type_confidence": 0.94,
+        "classified_by": "SIGNATURE",
+        "page_count": 1,
+        "has_text_layer": True,
+        "fields": {
+            "warranty_years": {
+                "value": "3 years onsite",
+                "numeric": 3,
+                "page": 1,
+                "confidence": 0.96,
+                "snippet": "Warranty: 3 years onsite comprehensive warranty from the OEM.",
+            },
+        },
+    },
+    {
+        "original_filename": "Commercial_Bid.pdf",
+        "doc_type": "COMMERCIAL_BID",
+        "doc_type_confidence": 0.95,
+        "classified_by": "SIGNATURE",
+        "page_count": 2,
+        "has_text_layer": True,
+        "fields": {
+            "delivery_days": {
+                "value": "28 days from PO",
+                "numeric": 28,
+                "page": 2,
+                "confidence": 0.96,
+                "snippet": "Delivery: Within 28 days from the date of Purchase Order.",
+            },
+            **_contact(
+                email="sales@crestlinecomputers.in",
+                phone=_SHARED_PHONE,
+                address="Plot 118, Phase II, Okhla Industrial Area, New Delhi, Delhi 110020",
+                bank_account=_SHARED_BANK_ACCOUNT,
+                page=1,
+            ),
+        },
+    },
+    {
+        "original_filename": "BIS_Certificate.pdf",
+        "doc_type": "BIS_CERTIFICATE",
+        "doc_type_confidence": 0.94,
+        "classified_by": "SIGNATURE",
+        "page_count": 1,
+        "has_text_layer": True,
+        "fields": {
+            "bis_registration_no": {
+                "value": "R-41093340",
+                "page": 1,
+                "confidence": 0.95,
+                "snippet": "BIS Registration No. R-41093340  |  Valid upto: 15/01/2028",
+            },
+            "certificate_holder": {
+                "value": "Crestline Computers LLP",
+                "page": 1,
+                "confidence": 0.95,
+                "snippet": "Registered to: Crestline Computers LLP",
+            },
+        },
+    },
+    {
+        "original_filename": "OEM_Authorization_Form.pdf",
+        "doc_type": "OEM_AUTHORIZATION",
+        "doc_type_confidence": 0.93,
+        "classified_by": "SIGNATURE",
+        "page_count": 1,
+        "has_text_layer": True,
+        "fields": {
+            "oem_authorization_ref": {
+                "value": "MAF/2026/GEM-4471902/0203",
+                "page": 1,
+                "confidence": 0.93,
+                "snippet": "Manufacturer Authorization Form Ref. MAF/2026/GEM-4471902/0203 issued for Bid No. GEM/2026/B/4471902.",
+            },
+        },
+    },
+]
+
+# ---------------------------------------------------------------------------
+# All bidders, in load order. The first is the "primary" demo bid returned by
+# `/api/demo/load` as `bid` and by `/api/dashboard` as `demo_bid_id`.
+# ---------------------------------------------------------------------------
+
+BIDDERS = [
+    {"bidder_name": "TechNova Systems Pvt. Ltd.", "documents": TECHNOVA_DOCUMENTS},
+    {"bidder_name": "Apex Infotech Solutions", "documents": APEX_DOCUMENTS},
+    {"bidder_name": "Bharat Digital Technologies Pvt. Ltd.", "documents": BHARAT_DOCUMENTS},
+    {"bidder_name": "Crestline Computers LLP", "documents": CRESTLINE_DOCUMENTS},
+]
+
+# Backwards-compatible aliases for the primary bidder.
+BIDDER_NAME = BIDDERS[0]["bidder_name"]
+DOCUMENTS = BIDDERS[0]["documents"]

@@ -111,10 +111,10 @@ export function DashboardPage() {
 
         <p className="text-sm text-text-muted">
           Load the sample tender — <strong className="text-text">Supply of Laptop Computers
-          for Government Office</strong> — and a bidder document package from{' '}
-          <strong className="text-text">TechNova Systems Pvt. Ltd.</strong>, then run
-          compliance evaluation to see PASS / REVIEW / FAIL / MISSING verdicts with full
-          evidence and scoring.
+          for Government Office</strong> — and document packages from{' '}
+          <strong className="text-text">four bidders</strong>, then pick a bidder from the
+          selector at the top and run compliance evaluation to see PASS / REVIEW / FAIL /
+          MISSING verdicts with full evidence and scoring.
         </p>
 
         {demoError && <p className="mt-3 text-sm text-fail">{demoError}</p>}

@@ -68,6 +68,8 @@ class Requirement(Base):
     source_clause: Mapped[str] = mapped_column(Text, default="")
 
     is_human_edited: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Check the evidence document against the issuer's record (app.verification).
+    verification_required: Mapped[bool] = mapped_column(Boolean, default=False)
 
     tender: Mapped["Tender"] = relationship(back_populates="requirements")
     evaluations: Mapped[list["Evaluation"]] = relationship(
@@ -79,6 +81,9 @@ class Requirement(Base):
 
 class Bid(Base):
     __tablename__ = "bids"
+    # Never reuse the id of a deleted bid: audit events refer to bids by id
+    # and outlive them (e.g. across a demo reset).
+    __table_args__ = {"sqlite_autoincrement": True}
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     tender_id: Mapped[int] = mapped_column(ForeignKey("tenders.id"))
@@ -113,6 +118,7 @@ class Bid(Base):
 
 class Document(Base):
     __tablename__ = "documents"
+    __table_args__ = {"sqlite_autoincrement": True}  # see Bid
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     bid_id: Mapped[int] = mapped_column(ForeignKey("bids.id"))
@@ -130,6 +136,26 @@ class Document(Base):
     has_text_layer: Mapped[bool] = mapped_column(Boolean, default=True)
     text_path: Mapped[str] = mapped_column(String, default="")
     fields: Mapped[dict] = mapped_column(JSON, default=dict)
+    # SHA-256 fingerprint taken when the document was loaded (see app.audit).
+    # For uploaded files it is computed from the stored file's bytes.
+    sha256: Mapped[str] = mapped_column(String, default="")
+
+    # Uploaded PDFs (source == "UPLOAD"); seeded demo documents are "SAMPLE".
+    source: Mapped[str] = mapped_column(String, default="SAMPLE")
+    file_size: Mapped[int] = mapped_column(Integer, default=0)
+    # Text per page, index 0 = page 1, exactly as PyMuPDF extracted it.
+    page_texts: Mapped[list] = mapped_column(JSON, default=list)
+    # Page numbers (1-based) with no extractable text, e.g. scanned images.
+    pages_without_text: Mapped[list] = mapped_column(JSON, default=list)
+    # AI | RULES | RULES_FALLBACK ("" for seeded demo documents)
+    extraction_mode: Mapped[str] = mapped_column(String, default="")
+    extraction_note: Mapped[str] = mapped_column(Text, default="")
+    # Uploaded PDFs: whether a digital signature field is present (None for
+    # seeded documents). The signature itself is NOT validated.
+    has_signature_field: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    # Latest "Re-verify file" result: UNCHANGED | CHANGED | FILE_MISSING
+    last_reverify_status: Mapped[str] = mapped_column(String, default="")
+    last_reverified_at: Mapped[datetime | None] = mapped_column(nullable=True)
     created_at: Mapped[datetime] = mapped_column(default=now)
 
     bid: Mapped["Bid"] = relationship(back_populates="documents")
@@ -158,6 +184,27 @@ class Evaluation(Base):
 
     ai_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
     ai_rationale: Mapped[str] = mapped_column(Text, default="")
+
+    # Officer override. `verdict` always keeps the system's verdict; when
+    # `officer_verdict` is set it is the effective verdict for scoring/reports.
+    officer_verdict: Mapped[str | None] = mapped_column(String, nullable=True)
+    override_reason: Mapped[str] = mapped_column(Text, default="")
+    # One of app.audit.REASON_CATEGORIES; "" on overrides made before
+    # categories existed.
+    override_category: Mapped[str] = mapped_column(String, default="")
+    officer_name: Mapped[str] = mapped_column(String, default="")
+    officer_username: Mapped[str] = mapped_column(String, default="")
+    overridden_at: Mapped[datetime | None] = mapped_column(nullable=True)
+
+    # Document trust layer, separate from the compliance verdict above.
+    # VERIFIED | UNVERIFIED | VERIFICATION_FAILED | NOT_APPLICABLE
+    verification_status: Mapped[str] = mapped_column(String, default="NOT_APPLICABLE")
+    verification_reason: Mapped[str] = mapped_column(Text, default="")
+    verification_source: Mapped[str] = mapped_column(String, default="")
+    verification_checked_at: Mapped[str] = mapped_column(String, default="")
+    verification_document_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # {"matched": [...], "mismatched": [...], "issuer_record": {...}, "submitted": {...}}
+    verification_details: Mapped[dict] = mapped_column(JSON, default=dict)
 
     bid: Mapped["Bid"] = relationship(back_populates="evaluations")
     requirement: Mapped["Requirement"] = relationship(back_populates="evaluations")
@@ -225,3 +272,58 @@ class Report(Base):
     generated_at: Mapped[datetime] = mapped_column(default=now)
 
     bid: Mapped["Bid"] = relationship(back_populates="reports")
+
+
+class AuditEvent(Base):
+    """One entry in the append-only, hash-chained audit log.
+
+    Deliberately has no foreign keys: audit history must survive the deletion
+    of the bid/tender it describes, so names are copied in at write time.
+    `hash` covers every other column plus `prev_hash` (see app.audit).
+    """
+
+    __tablename__ = "audit_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_type: Mapped[str] = mapped_column(String, nullable=False)
+    # VERDICT_OVERRIDE | DOCUMENT_LOADED
+    timestamp: Mapped[str] = mapped_column(String, nullable=False)  # ISO-8601 UTC
+
+    bid_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    bidder_name: Mapped[str] = mapped_column(String, default="")
+
+    requirement_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    requirement_code: Mapped[str] = mapped_column(String, default="")
+    requirement_title: Mapped[str] = mapped_column(String, default="")
+    system_verdict: Mapped[str] = mapped_column(String, default="")
+    officer_verdict: Mapped[str] = mapped_column(String, default="")
+    reason: Mapped[str] = mapped_column(Text, default="")
+    reason_category: Mapped[str] = mapped_column(String, default="")
+    officer_name: Mapped[str] = mapped_column(String, default="")
+    # Login of the officer who made the change ("" on events recorded
+    # before officer login existed).
+    officer_username: Mapped[str] = mapped_column(String, default="")
+    # Verification checks: the outcome (VERIFIED / UNVERIFIED /
+    # VERIFICATION_FAILED, or UNCHANGED / CHANGED / FILE_MISSING for a file
+    # re-check) and the source that was consulted. "" on other events.
+    check_status: Mapped[str] = mapped_column(String, default="")
+    check_source: Mapped[str] = mapped_column(String, default="")
+
+    document_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    document_name: Mapped[str] = mapped_column(String, default="")
+    document_sha256: Mapped[str] = mapped_column(String, default="")
+
+    prev_hash: Mapped[str] = mapped_column(String, nullable=False)
+    hash: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+
+
+class User(Base):
+    """A prototype login account, seeded from configuration (app.auth)."""
+
+    __tablename__ = "users"
+
+    username: Mapped[str] = mapped_column(String, primary_key=True)
+    full_name: Mapped[str] = mapped_column(String, nullable=False)
+    designation: Mapped[str] = mapped_column(String, default="")
+    role: Mapped[str] = mapped_column(String, nullable=False)  # OFFICER | REVIEWER
+    password_hash: Mapped[str] = mapped_column(String, nullable=False)  # salted scrypt

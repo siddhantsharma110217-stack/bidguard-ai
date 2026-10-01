@@ -75,6 +75,24 @@ export function IconShieldCheck(props: SVGProps<SVGSVGElement>) {
   )
 }
 
+export function IconLock(props: SVGProps<SVGSVGElement>) {
+  return (
+    <Base {...props}>
+      <rect x="4" y="11" width="16" height="10" rx="1.5" />
+      <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+    </Base>
+  )
+}
+
+export function IconFlag(props: SVGProps<SVGSVGElement>) {
+  return (
+    <Base {...props}>
+      <path d="M5 21V4" />
+      <path d="M5 4h11l-2 4 2 4H5" />
+    </Base>
+  )
+}
+
 export function IconBarChart(props: SVGProps<SVGSVGElement>) {
   return (
     <Base {...props}>

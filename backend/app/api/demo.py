@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
+from app.auth import current_user
 from app.db import get_db
 from app.models import Bid, Tender
 from app.schemas import BidOut, DashboardOut, TenderOut
@@ -12,17 +13,23 @@ router = APIRouter(prefix="/api", tags=["demo"])
 
 @router.post("/demo/load")
 def load_demo_dataset(reset: bool = False, db: Session = Depends(get_db)):
-    """Create (or fetch) the deterministic demo tender + bidder package."""
-    tender, bid = load_demo(db, reset=reset)
+    """Create (or fetch) the deterministic demo tender + bidder packages.
+
+    `bid` / `document_count` describe the primary demo bid (kept for existing
+    clients); `bids` lists every demo bidder.
+    """
+    tender, bids = load_demo(db, reset=reset)
     return {
         "tender": TenderOut.model_validate(tender),
-        "bid": BidOut.model_validate(bid),
+        "bid": BidOut.model_validate(bids[0]),
+        "bids": [BidOut.model_validate(b) for b in bids],
         "requirement_count": len(sample_data.REQUIREMENTS),
         "document_count": len(sample_data.DOCUMENTS),
+        "bidder_count": len(bids),
     }
 
 
-@router.get("/dashboard", response_model=DashboardOut)
+@router.get("/dashboard", response_model=DashboardOut, dependencies=[Depends(current_user)])
 def dashboard(db: Session = Depends(get_db)):
     tenders = db.query(Tender).all()
     bids = db.query(Bid).all()
@@ -42,11 +49,12 @@ def dashboard(db: Session = Depends(get_db)):
         .filter(Tender.reference_no == sample_data.TENDER["reference_no"])
         .first()
     )
-    demo_bid = (
-        db.query(Bid).filter(Bid.tender_id == demo_tender.id).first()
+    demo_bids = (
+        db.query(Bid).filter(Bid.tender_id == demo_tender.id).order_by(Bid.id).all()
         if demo_tender
-        else None
+        else []
     )
+    demo_bid = demo_bids[0] if demo_bids else None
 
     return DashboardOut(
         active_tenders=len(tenders),
@@ -56,4 +64,5 @@ def dashboard(db: Session = Depends(get_db)):
         demo_loaded=demo_tender is not None,
         demo_tender_id=demo_tender.id if demo_tender else None,
         demo_bid_id=demo_bid.id if demo_bid else None,
+        demo_bid_ids=[b.id for b in demo_bids],
     )

@@ -27,7 +27,18 @@ class MockComplianceEvaluator:
     """Offline, deterministic ComplianceEvaluator implementation."""
 
     def evaluate_bid(self, requirements: list, documents: list) -> list[EvaluationOutcome]:
-        return [self._evaluate_one(req, documents) for req in requirements]
+        outcomes = []
+        for req in requirements:
+            outcome = self._evaluate_one(req, documents)
+            # Uploaded documents record how each value was extracted; carry
+            # that into the trace so every evidence item can show it. Seeded
+            # demo documents have neither key, so their traces are unchanged.
+            data, _ = self._find_field((req.rule_params or {}).get("field", ""), documents)
+            for key in ("extraction_method", "citation_status"):
+                if data and data.get(key):
+                    outcome.rule_trace[key] = data[key]
+            outcomes.append(outcome)
+        return outcomes
 
     # ---------- field lookup ----------
 
@@ -160,7 +171,35 @@ class MockComplianceEvaluator:
         page = int(data.get("page", 0))
         snippet = data.get("snippet", value)
 
-        # 2. Extraction flagged the evidence as ambiguous / incomplete.
+        # 2a. The evidence may sit on a page with no extractable text.
+        if data.get("unreadable"):
+            return self._outcome(
+                req,
+                verdict="REVIEW",
+                confidence=0.0,
+                evidence="",
+                doc=doc,
+                page=page,
+                explanation=(
+                    f"'{req.title}' is not stated on any readable page of the bid, but "
+                    f"{data.get('ambiguity_reason', 'a page with no extractable text may hold the evidence')}. "
+                    f"No automated verdict is issued."
+                ),
+                recommended_action=(
+                    "Check the scanned page manually, or ask the bidder for a "
+                    "text-searchable copy of the document."
+                ),
+                decision_source="HUMAN_REVIEW",
+                rule_trace={
+                    "check": req.rule_type,
+                    "field": field_name,
+                    "observed": None,
+                    "passed": None,
+                    "reason": "no_extractable_text",
+                },
+            )
+
+        # 2b. Extraction flagged the evidence as ambiguous / incomplete.
         if data.get("ambiguous"):
             return self._outcome(
                 req,
@@ -219,7 +258,7 @@ class MockComplianceEvaluator:
                 evidence=snippet,
                 doc=doc,
                 page=page,
-                explanation=self._pass_explanation(req, trace, doc),
+                explanation=self._pass_explanation(req, trace, doc, page),
                 recommended_action="No action required.",
                 decision_source="RULE",
                 rule_trace=trace,
@@ -245,7 +284,7 @@ class MockComplianceEvaluator:
 
     # ---------- explanation text ----------
 
-    def _pass_explanation(self, req, trace: dict, doc) -> str:
+    def _pass_explanation(self, req, trace: dict, doc, page: int) -> str:
         check = trace["check"]
         observed = trace.get("observed")
         src = doc.original_filename
@@ -253,7 +292,8 @@ class MockComplianceEvaluator:
             return (
                 f"The bid offers {observed} {trace['unit']}, which meets or exceeds the "
                 f"required minimum of {trace['required_minimum']} {trace['unit']} "
-                f"(source: {src}, page {req.source_page or 1})."
+                # The page of the evidence, not of the tender clause.
+                f"(source: {src}, page {page or 1})."
             )
         if check == "numeric_max":
             return (

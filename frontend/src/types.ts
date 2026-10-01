@@ -1,7 +1,14 @@
+export type ExtractionMode = 'AI' | 'RULES' | 'RULES_FALLBACK'
+
 export interface HealthStatus {
   status: string
   ai_provider: string
   database_url: string
+  /** Absent on backends that predate PDF upload. Never includes the API key. */
+  extraction_mode?: ExtractionMode
+  extraction_label?: string
+  extraction_model?: string
+  max_upload_mb?: number
 }
 
 export type Verdict = 'PASS' | 'REVIEW' | 'FAIL' | 'MISSING'
@@ -60,6 +67,34 @@ export interface BidDocument {
   page_count: number
   has_text_layer: boolean
   extracted_field_count: number
+  /** SHA-256 fingerprint taken when the document was loaded. */
+  sha256: string
+  /** UPLOAD for uploaded PDFs, SAMPLE for seeded demo documents. */
+  source: 'UPLOAD' | 'SAMPLE'
+  file_size: number
+  pages_without_text: number[]
+  /** e.g. "No extractable text — OCR not available"; "" when all pages read. */
+  text_status: string
+  extraction_mode: ExtractionMode | ''
+  extraction_label: string
+  extraction_note: string
+  /** null = not checked (seeded documents). The signature is never validated. */
+  has_signature_field: boolean | null
+  reverifiable: boolean
+  last_reverify_status: FileCheckStatus | ''
+  last_reverified_at: string | null
+  /** From the latest evaluation; '' when this document was not checked. */
+  verification_status: VerificationStatus | ''
+  verification_reason: string
+}
+
+export interface UploadResult {
+  bid: Bid
+  tender_id: number
+  extraction_mode: ExtractionMode
+  extraction_label: string
+  extraction_note: string
+  documents: BidDocument[]
 }
 
 export interface Bid {
@@ -75,11 +110,23 @@ export interface Bid {
   evaluated_at: string | null
 }
 
+/** One bidder contact detail, as extracted from a submitted document. */
+export interface ContactField {
+  field: string
+  label: string
+  value: string
+  source_document: string
+  source_document_id: number
+  source_page: number
+}
+
 export interface BidDocuments {
   bid: Bid
   tender: Tender
   total: number
   documents: BidDocument[]
+  /** Absent from backends that predate contact extraction. */
+  contact?: ContactField[]
 }
 
 export interface EvaluationResult {
@@ -100,6 +147,101 @@ export interface EvaluationResult {
   recommended_action: string
   decision_source: string
   rule_trace: Record<string, unknown>
+  /** How the evidence was obtained; '' for pre-extracted demo data. */
+  extraction_method: ExtractionMode | ''
+  /** AI mode only: VERIFIED | UNSUPPORTED | VALUE_NOT_IN_QUOTE */
+  citation_status: string
+  /** `verdict` and `score` are effective values; these describe any override. */
+  system_verdict: Verdict
+  overridden: boolean
+  officer_verdict: Verdict | null
+  override_reason: string
+  /** Reason category code; '' for overrides made before categories existed. */
+  override_category: string
+  officer_name: string
+  officer_username: string
+  /** Document trust layer, separate from the compliance verdict. */
+  verification_required: boolean
+  verification_status: VerificationStatus
+  verification_reason: string
+  verification_source: string
+  verification_checked_at: string
+  verification_details: VerificationDetails
+  /** The rule engine's verdict before verification (equals `system_verdict`
+   *  unless verification turned a PASS into REVIEW). */
+  rule_verdict: Verdict
+  overridden_at: string | null
+}
+
+/** The officer is always the logged-in user; the backend takes the name
+ *  from the session, so the request carries none. */
+export type VerificationStatus =
+  | 'VERIFIED'
+  | 'UNVERIFIED'
+  | 'VERIFICATION_FAILED'
+  | 'NOT_APPLICABLE'
+
+export interface FieldCheck {
+  field: string
+  label: string
+  submitted: string
+  issuer: string
+}
+
+export interface VerificationDetails {
+  matched?: FieldCheck[]
+  mismatched?: FieldCheck[]
+  issuer_record?: Record<string, string> | null
+  submitted?: {
+    certificate_number: string
+    holder: string
+    holder_source: string
+    document_name: string
+    page: number
+  } | null
+}
+
+export type FileCheckStatus = 'UNCHANGED' | 'CHANGED' | 'FILE_MISSING'
+
+export interface ReverifyResult {
+  document_id: number
+  status: FileCheckStatus
+  label: string
+  recorded_sha256: string
+  current_sha256: string
+  checked_at: string
+}
+
+export interface OverrideRequest {
+  requirement_id: number
+  verdict: Verdict
+  reason_category: string
+  reason: string
+}
+
+export type Role = 'OFFICER' | 'REVIEWER'
+
+export interface AuthUser {
+  username: string
+  full_name: string
+  designation: string
+  role: Role
+}
+
+export interface LoginResult {
+  token: string
+  /** Unix timestamp (seconds). */
+  expires_at: number
+  user: AuthUser
+}
+
+export interface DemoAccount {
+  username: string
+  full_name: string
+  designation: string
+  role: Role
+  /** Only while the password is still the published demo default. */
+  demo_password: string | null
 }
 
 export interface EvaluationSummary {
@@ -124,9 +266,12 @@ export interface EvaluationResults {
 
 export interface DemoLoadResult {
   tender: Tender
+  /** The primary demo bid (first of `bids`). */
   bid: Bid
+  bids: Bid[]
   requirement_count: number
   document_count: number
+  bidder_count: number
 }
 
 export interface Dashboard {
@@ -137,8 +282,95 @@ export interface Dashboard {
   demo_loaded: boolean
   demo_tender_id: number | null
   demo_bid_id: number | null
+  /** Every bid on the demo tender, in submission order. */
+  demo_bid_ids: number[]
+}
+
+export type AuditEventType =
+  | 'VERDICT_OVERRIDE'
+  | 'DOCUMENT_LOADED'
+  | 'DOCUMENT_VERIFICATION'
+  | 'FILE_REVERIFIED'
+
+export interface AuditEvent {
+  id: number
+  event_type: AuditEventType
+  timestamp: string
+  bid_id: number | null
+  bidder_name: string
+  requirement_id: number | null
+  requirement_code: string
+  requirement_title: string
+  system_verdict: Verdict | ''
+  officer_verdict: Verdict | ''
+  reason: string
+  reason_category: string
+  officer_name: string
+  /** '' on events recorded before officer login existed. */
+  officer_username: string
+  /** Verification checks only: the outcome and the source consulted. */
+  check_status: string
+  check_source: string
+  document_id: number | null
+  document_name: string
+  document_sha256: string
+  prev_hash: string
+  hash: string
+}
+
+export interface AuditVerification {
+  intact: boolean
+  total_events: number
+  verified_events: number
+  head_hash: string
+  first_broken: { id: number; position: number; reason: string } | null
+  checked_at: string
 }
 
 export interface ApiErrorBody {
   detail?: string
+}
+
+export type RedFlagKind =
+  | 'SHARED_CONTACT'
+  | 'SIMILAR_DOCUMENTS'
+  | 'DUPLICATE_FILE'
+  | 'DUPLICATE_CERTIFICATE'
+  | 'INCONSISTENT_TREATMENT'
+  | 'VERIFICATION_MISMATCH'
+export type RedFlagCategory =
+  | 'POSSIBLE_COLLUSION'
+  | 'INCONSISTENT_TREATMENT'
+  | 'DOCUMENT_VERIFICATION'
+
+export interface RedFlagEvidence {
+  bid_id: number
+  bidder_name: string
+  label: string
+  value: string
+  source_document: string
+  source_page: number
+  detail: string
+}
+
+export interface RedFlag {
+  kind: RedFlagKind
+  category: RedFlagCategory
+  title: string
+  summary: string
+  bidders: { bid_id: number; bidder_name: string }[]
+  evidence: RedFlagEvidence[]
+  similarity: number | null
+  requirement_code: string
+}
+
+export interface RedFlagReport {
+  tender: Tender
+  /** Always shown with the flags: "red flag for review — not proof of wrongdoing". */
+  disclaimer: string
+  bidders: { bid_id: number; bidder_name: string; evaluated: boolean }[]
+  similarity_threshold: number
+  min_similarity_text_length: number
+  total_flags: number
+  flags: RedFlag[]
 }

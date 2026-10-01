@@ -9,6 +9,9 @@ import { LoadingState } from '../components/ui/LoadingState'
 import { ErrorState } from '../components/ui/ErrorState'
 import { EmptyState } from '../components/ui/EmptyState'
 import { IconBarChart } from '../components/icons'
+import { EvidenceSource } from '../components/EvidenceSource'
+import { VerificationBadge } from '../components/VerificationBadge'
+import { NOT_SPECIFIED, REASON_CATEGORIES, categoryLabel } from '../overrideCategories'
 
 function formatTimestamp(iso: string | null): string {
   if (!iso) return 'Not recorded'
@@ -78,6 +81,15 @@ export function ReportsPage() {
     (r) => r.obligation === 'MANDATORY' && (r.verdict === 'FAIL' || r.verdict === 'MISSING'),
   )
   const attentionItems = results.results.filter((r) => r.verdict !== 'PASS')
+  const overrides = results.results.filter((r) => r.overridden)
+  // Every category is listed (zeros included) so reports are comparable;
+  // "Not specified" only appears when an older override lacks one.
+  const categoryCounts = [...REASON_CATEGORIES.map((c) => c.label), NOT_SPECIFIED]
+    .map((label) => ({
+      label,
+      count: overrides.filter((r) => categoryLabel(r.override_category) === label).length,
+    }))
+    .filter((c) => c.label !== NOT_SPECIFIED || c.count > 0)
   const counts: Record<Verdict, number> = {
     PASS: summary.passed,
     REVIEW: summary.review,
@@ -179,6 +191,68 @@ export function ReportsPage() {
         </div>
       </Card>
 
+      {/* Officer overrides */}
+      <Card className="report-block p-5">
+        <h3 className="text-sm font-semibold text-text">Officer Overrides ({overrides.length})</h3>
+        {overrides.length === 0 ? (
+          <p className="mt-1 text-sm text-text-muted">
+            No verdicts were overridden — every finding below is the system's verdict.
+          </p>
+        ) : (
+          <>
+            <p className="mt-1 text-sm text-text-muted">
+              Verdicts changed by an evaluating officer. Scores and responsiveness above use the
+              officer's verdict; each change is recorded in the tamper-evident audit log.
+            </p>
+            <div className="mt-3">
+              <div className="text-xs font-medium uppercase tracking-wide text-text-faint">
+                Overrides by category
+              </div>
+              <dl className="mt-1.5 grid max-w-sm grid-cols-1 gap-y-1 text-xs">
+                {categoryCounts.map((c) => (
+                  <div key={c.label} className="flex justify-between gap-3">
+                    <dt className={c.count ? 'text-text' : 'text-text-faint'}>{c.label}</dt>
+                    <dd
+                      className={`tabular-nums ${c.count ? 'font-semibold text-text' : 'text-text-faint'}`}
+                    >
+                      {c.count}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+            <ul className="mt-3 space-y-3">
+              {overrides.map((r) => (
+                <li
+                  key={r.requirement_id}
+                  className="report-item border-t border-border pt-3 text-sm first:border-0 first:pt-0"
+                >
+                  <div className="font-medium text-text">
+                    {r.requirement_code} — {r.requirement_title}
+                  </div>
+                  <p className="mt-1 text-text-muted">
+                    <span className="font-medium text-text">
+                      {r.system_verdict} → {r.verdict}
+                    </span>
+                    , {r.override_reason}
+                  </p>
+                  <p className="mt-1 text-xs text-text-muted">
+                    Category:{' '}
+                    <span className="font-medium text-text">
+                      {categoryLabel(r.override_category)}
+                    </span>
+                  </p>
+                  <p className="mt-1 text-xs text-text-faint">
+                    Overridden by {r.officer_name}
+                    {r.overridden_at && ` on ${formatTimestamp(r.overridden_at)}`}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </Card>
+
       {/* Blocking requirements */}
       <Card className="report-block border-fail/30 p-5">
         <h3 className="text-sm font-semibold text-text">
@@ -238,6 +312,20 @@ export function ReportsPage() {
                 <td className="px-4 py-3 font-medium text-text">{r.requirement_title}</td>
                 <td className="px-4 py-3">
                   <VerdictBadge verdict={r.verdict} />
+                  {r.overridden && (
+                    <div className="mt-1 text-[11px] whitespace-nowrap text-text-faint">
+                      {r.system_verdict} → {r.verdict} (officer)
+                    </div>
+                  )}
+                  {r.verification_required && (
+                    <div className="mt-1.5">
+                      <div className="text-[11px] text-text-faint">Verification</div>
+                      <VerificationBadge status={r.verification_status} />
+                      <p className="mt-1 max-w-[16rem] text-[11px] text-text-muted">
+                        {r.verification_reason}
+                      </p>
+                    </div>
+                  )}
                 </td>
                 <td className="px-4 py-3 tabular-nums text-text">{r.score.toFixed(0)}</td>
                 <td className="px-4 py-3 text-xs text-text-muted">
@@ -248,6 +336,7 @@ export function ReportsPage() {
                         {r.source_document}
                         {r.source_page > 0 && ` · p.${r.source_page}`}
                       </div>
+                      <EvidenceSource result={r} />
                     </>
                   ) : (
                     'No evidence found'
@@ -286,7 +375,8 @@ export function ReportsPage() {
                     {r.requirement_code} — {r.requirement_title}
                   </span>
                   <span className="text-xs text-text-faint">
-                    ({r.obligation.toLowerCase()}, decided by {r.decision_source})
+                    ({r.obligation.toLowerCase()}, decided by{' '}
+                    {r.overridden ? `officer ${r.officer_name}` : r.decision_source})
                   </span>
                 </div>
                 <p className="mt-1 text-sm text-text-muted">{r.explanation}</p>
@@ -294,6 +384,12 @@ export function ReportsPage() {
                   Evidence:{' '}
                   {r.evidence ? `Found in ${r.source_document}` : 'Not found in submitted package'}
                 </p>
+                {r.verification_required && r.verification_status !== 'NOT_APPLICABLE' && (
+                  <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-text-muted">
+                    Verification: <VerificationBadge status={r.verification_status} />{' '}
+                    {r.verification_reason} ({r.verification_source})
+                  </p>
+                )}
                 <p className="mt-1 text-xs font-medium text-accent">
                   Recommended action: {r.recommended_action}
                 </p>

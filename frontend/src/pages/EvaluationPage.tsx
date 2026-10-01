@@ -1,3 +1,4 @@
+import { Fragment, useState } from 'react'
 import { getBidDocuments } from '../api/client'
 import { useDemo } from '../context/DemoContext'
 import { useEvaluation } from '../context/EvaluationContext'
@@ -8,11 +9,14 @@ import { VerdictBadge } from '../components/ui/VerdictBadge'
 import { LoadingState } from '../components/ui/LoadingState'
 import { ErrorState } from '../components/ui/ErrorState'
 import { EmptyState } from '../components/ui/EmptyState'
+import { OverrideForm } from '../components/OverrideForm'
 import { IconActivity, IconSpinner } from '../components/icons'
 
 export function EvaluationPage() {
   const { loading: demoLoading, loadDemo } = useDemo()
-  const { results, loading, error, running, runError, bidId, run, reload } = useEvaluation()
+  const { results, loading, error, running, runError, bidId, run, override, reload } =
+    useEvaluation()
+  const [editingId, setEditingId] = useState<number | null>(null)
 
   // Tender / bidder names for the pre-evaluation card. Read from the API so
   // this panel describes whatever bid is actually loaded.
@@ -107,7 +111,7 @@ export function EvaluationPage() {
 
       {results && !running && (
         <Card className="overflow-x-auto">
-          <table className="w-full min-w-[860px] text-sm">
+          <table className="w-full min-w-[1000px] text-sm">
             <thead>
               <tr className="border-b border-border text-left text-xs font-medium uppercase tracking-wide text-text-faint">
                 <th className="px-4 py-3">Requirement</th>
@@ -115,38 +119,77 @@ export function EvaluationPage() {
                 <th className="px-4 py-3">Score</th>
                 <th className="px-4 py-3">Evidence</th>
                 <th className="px-4 py-3">Confidence</th>
+                <th className="px-4 py-3">Officer</th>
               </tr>
             </thead>
             <tbody>
               {results.results.map((r) => (
-                <tr
-                  key={r.requirement_id}
-                  className="border-b border-border align-top last:border-0 hover:bg-panel-raised"
-                >
-                  <td className="px-4 py-3">
-                    <div className="font-medium text-text">
-                      {r.requirement_code} — {r.requirement_title}
-                    </div>
-                    <div className="mt-0.5 max-w-md text-xs text-text-muted">{r.explanation}</div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <VerdictBadge verdict={r.verdict} />
-                  </td>
-                  <td className="px-4 py-3 tabular-nums text-text">{r.score.toFixed(0)}</td>
-                  <td className="px-4 py-3">
-                    {r.evidence ? (
-                      <>
-                        <div className="max-w-xs text-xs text-text">{r.evidence}</div>
-                        <div className="mt-0.5 text-xs text-text-faint">{r.source_document}</div>
-                      </>
-                    ) : (
-                      <span className="text-xs text-text-faint">No evidence found</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 tabular-nums text-text-muted">
-                    {Math.round(r.confidence * 100)}%
-                  </td>
-                </tr>
+                <Fragment key={r.requirement_id}>
+                  <tr
+                    className={`border-b border-border align-top hover:bg-panel-raised ${
+                      editingId === r.requirement_id ? 'bg-panel-raised' : ''
+                    }`}
+                  >
+                    <td className="px-4 py-3">
+                      <div className="font-medium text-text">
+                        {r.requirement_code} — {r.requirement_title}
+                      </div>
+                      <div className="mt-0.5 max-w-md text-xs text-text-muted">{r.explanation}</div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <VerdictBadge verdict={r.verdict} />
+                      {r.overridden && (
+                        <div className="mt-1 text-[11px] whitespace-nowrap text-text-faint">
+                          System: {r.system_verdict}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 tabular-nums text-text">{r.score.toFixed(0)}</td>
+                    <td className="px-4 py-3">
+                      {r.evidence ? (
+                        <>
+                          <div className="max-w-xs text-xs text-text">{r.evidence}</div>
+                          <div className="mt-0.5 text-xs text-text-faint">{r.source_document}</div>
+                        </>
+                      ) : (
+                        <span className="text-xs text-text-faint">No evidence found</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 tabular-nums text-text-muted">
+                      {Math.round(r.confidence * 100)}%
+                    </td>
+                    <td className="px-4 py-3">
+                      {r.overridden && (
+                        <div className="mb-1.5 max-w-[14rem] text-xs text-text-muted">
+                          <span className="font-medium text-text">{r.officer_name}</span>:{' '}
+                          {r.override_reason}
+                        </div>
+                      )}
+                      <button
+                        onClick={() =>
+                          setEditingId(editingId === r.requirement_id ? null : r.requirement_id)
+                        }
+                        className="rounded border border-border-strong px-2 py-1 text-xs font-medium text-text hover:bg-panel"
+                      >
+                        {r.overridden ? 'Change' : 'Override'}
+                      </button>
+                    </td>
+                  </tr>
+                  {editingId === r.requirement_id && (
+                    <tr className="border-b border-border bg-panel-raised">
+                      <td colSpan={6} className="px-4 pb-4 pt-1">
+                        <OverrideForm
+                          result={r}
+                          onSubmit={async (payload) => {
+                            await override(payload)
+                            setEditingId(null)
+                          }}
+                          onCancel={() => setEditingId(null)}
+                        />
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               ))}
             </tbody>
           </table>

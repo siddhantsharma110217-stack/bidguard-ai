@@ -9,6 +9,7 @@ import { DocumentsPage } from './pages/DocumentsPage'
 import { EvaluationPage } from './pages/EvaluationPage'
 import { CompliancePage } from './pages/CompliancePage'
 import { ReportsPage } from './pages/ReportsPage'
+import { AuditPage } from './pages/AuditPage'
 
 function App() {
   return (
@@ -24,6 +25,7 @@ function App() {
               <Route path="/evaluation" element={<EvaluationPage />} />
               <Route path="/compliance" element={<CompliancePage />} />
               <Route path="/reports" element={<ReportsPage />} />
+              <Route path="/audit" element={<AuditPage />} />
             </Routes>
           </AppShell>
         </EvaluationProvider>

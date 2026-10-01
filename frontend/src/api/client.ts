@@ -1,11 +1,14 @@
 import type {
   ApiErrorBody,
+  AuditEvent,
+  AuditVerification,
   Bid,
   BidDocuments,
   Dashboard,
   DemoLoadResult,
   EvaluationResults,
   HealthStatus,
+  OverrideRequest,
   RequirementList,
   Tender,
 } from '../types'
@@ -93,4 +96,22 @@ export function runEvaluation(bidId: number): Promise<EvaluationResults> {
 
 export function getEvaluationResults(bidId: number): Promise<EvaluationResults> {
   return request<EvaluationResults>(`/api/evaluations/${bidId}/results`)
+}
+
+export function createOverride(
+  bidId: number,
+  payload: OverrideRequest,
+): Promise<EvaluationResults> {
+  return request<EvaluationResults>(`/api/evaluations/${bidId}/overrides`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function listAuditEvents(): Promise<AuditEvent[]> {
+  return request<AuditEvent[]>('/api/audit/events')
+}
+
+export function verifyAuditChain(): Promise<AuditVerification> {
+  return request<AuditVerification>('/api/audit/verify', { method: 'POST' })
 }

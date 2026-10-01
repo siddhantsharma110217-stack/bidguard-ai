@@ -130,6 +130,8 @@ class Document(Base):
     has_text_layer: Mapped[bool] = mapped_column(Boolean, default=True)
     text_path: Mapped[str] = mapped_column(String, default="")
     fields: Mapped[dict] = mapped_column(JSON, default=dict)
+    # SHA-256 fingerprint taken when the document was loaded (see app.audit).
+    sha256: Mapped[str] = mapped_column(String, default="")
     created_at: Mapped[datetime] = mapped_column(default=now)
 
     bid: Mapped["Bid"] = relationship(back_populates="documents")
@@ -158,6 +160,13 @@ class Evaluation(Base):
 
     ai_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
     ai_rationale: Mapped[str] = mapped_column(Text, default="")
+
+    # Officer override. `verdict` always keeps the system's verdict; when
+    # `officer_verdict` is set it is the effective verdict for scoring/reports.
+    officer_verdict: Mapped[str | None] = mapped_column(String, nullable=True)
+    override_reason: Mapped[str] = mapped_column(Text, default="")
+    officer_name: Mapped[str] = mapped_column(String, default="")
+    overridden_at: Mapped[datetime | None] = mapped_column(nullable=True)
 
     bid: Mapped["Bid"] = relationship(back_populates="evaluations")
     requirement: Mapped["Requirement"] = relationship(back_populates="evaluations")
@@ -225,3 +234,37 @@ class Report(Base):
     generated_at: Mapped[datetime] = mapped_column(default=now)
 
     bid: Mapped["Bid"] = relationship(back_populates="reports")
+
+
+class AuditEvent(Base):
+    """One entry in the append-only, hash-chained audit log.
+
+    Deliberately has no foreign keys: audit history must survive the deletion
+    of the bid/tender it describes, so names are copied in at write time.
+    `hash` covers every other column plus `prev_hash` (see app.audit).
+    """
+
+    __tablename__ = "audit_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_type: Mapped[str] = mapped_column(String, nullable=False)
+    # VERDICT_OVERRIDE | DOCUMENT_LOADED
+    timestamp: Mapped[str] = mapped_column(String, nullable=False)  # ISO-8601 UTC
+
+    bid_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    bidder_name: Mapped[str] = mapped_column(String, default="")
+
+    requirement_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    requirement_code: Mapped[str] = mapped_column(String, default="")
+    requirement_title: Mapped[str] = mapped_column(String, default="")
+    system_verdict: Mapped[str] = mapped_column(String, default="")
+    officer_verdict: Mapped[str] = mapped_column(String, default="")
+    reason: Mapped[str] = mapped_column(Text, default="")
+    officer_name: Mapped[str] = mapped_column(String, default="")
+
+    document_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    document_name: Mapped[str] = mapped_column(String, default="")
+    document_sha256: Mapped[str] = mapped_column(String, default="")
+
+    prev_hash: Mapped[str] = mapped_column(String, nullable=False)
+    hash: Mapped[str] = mapped_column(String, nullable=False, unique=True)

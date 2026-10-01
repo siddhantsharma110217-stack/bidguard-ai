@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { ApiError, getEvaluationResults, runEvaluation } from '../api/client'
-import type { EvaluationResults } from '../types'
+import { ApiError, createOverride, getEvaluationResults, runEvaluation } from '../api/client'
+import type { EvaluationResults, OverrideRequest } from '../types'
 import { useDemo } from './DemoContext'
 
 /**
@@ -24,6 +24,8 @@ interface EvaluationContextValue {
   hasEvaluation: boolean
   bidId: number | null
   run: () => Promise<void>
+  /** Records an officer override. Throws ApiError so the form can show it. */
+  override: (payload: OverrideRequest) => Promise<void>
   reload: () => void
 }
 
@@ -92,6 +94,17 @@ export function EvaluationProvider({ children }: { children: ReactNode }) {
     }
   }, [bidId, refreshDashboard])
 
+  const override = useCallback(
+    async (payload: OverrideRequest) => {
+      if (bidId == null) return
+      const r = await createOverride(bidId, payload)
+      setResults(r)
+      // Overrides change the bid's scores, which the dashboard tiles read.
+      await refreshDashboard()
+    },
+    [bidId, refreshDashboard],
+  )
+
   return (
     <EvaluationContext.Provider
       value={{
@@ -103,6 +116,7 @@ export function EvaluationProvider({ children }: { children: ReactNode }) {
         hasEvaluation: results !== null,
         bidId,
         run,
+        override,
         reload,
       }}
     >

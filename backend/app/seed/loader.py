@@ -6,6 +6,7 @@ creating duplicates, so the "Load Demo" button is safe to click repeatedly.
 
 from sqlalchemy.orm import Session
 
+from app.audit import record_document_loaded
 from app.models import Bid, Document, Requirement, Tender
 from app.seed import sample_data
 
@@ -46,7 +47,10 @@ def load_demo(db: Session, *, reset: bool = False) -> tuple[Tender, Bid]:
     db.flush()
 
     for spec in sample_data.DOCUMENTS:
-        db.add(Document(bid_id=bid.id, **spec))
+        doc = Document(bid_id=bid.id, **spec)
+        db.add(doc)
+        db.flush()
+        record_document_loaded(db, doc, bid.bidder_name)
 
     db.commit()
     db.refresh(existing)

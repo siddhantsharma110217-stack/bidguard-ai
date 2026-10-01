@@ -3,6 +3,10 @@
 A bid has exactly one current evaluation, so the bid id doubles as the
 evaluation id — `POST /api/evaluations` runs (or re-runs) the evaluation for
 a bid and returns results keyed by that id.
+
+Officers can override any verdict via `POST /api/evaluations/{bid_id}/overrides`.
+The system's verdict is never overwritten; the officer's verdict becomes the
+effective one, and every override is written to the hash-chained audit log.
 """
 
 from datetime import datetime, timezone
@@ -12,20 +16,49 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.api.bids import get_bid_or_404
+from app.audit import append_event, utc_timestamp
 from app.db import get_db
 from app.evaluation.evaluator import get_evaluator
-from app.evaluation.scoring import compute_summary
-from app.models import Document, Evaluation, Evidence, Requirement
+from app.evaluation.scoring import VERDICTS, compute_summary, score_for_verdict
+from app.models import Bid, Document, Evaluation, Evidence, Requirement
 from app.schemas import (
     BidOut,
     EvaluationCreate,
     EvaluationResultsOut,
+    OverrideCreate,
     ResultOut,
     SummaryOut,
     TenderOut,
 )
 
 router = APIRouter(prefix="/api/evaluations", tags=["evaluations"])
+
+MIN_REASON_LENGTH = 15
+
+
+def _effective_verdict(row: Evaluation) -> str:
+    return row.officer_verdict or row.verdict
+
+
+def _effective_score(row: Evaluation) -> float:
+    return score_for_verdict(row.officer_verdict) if row.officer_verdict else row.score
+
+
+def _apply_summary_to_bid(bid: Bid, rows: list[Evaluation]) -> None:
+    summary = compute_summary(
+        [
+            SimpleNamespace(
+                verdict=_effective_verdict(r),
+                score=_effective_score(r),
+                obligation=r.requirement.obligation,
+            )
+            for r in rows
+        ]
+    )
+    bid.compliance_score = summary["overall_compliance"]
+    bid.risk_score = summary["risk_score"]
+    bid.risk_band = summary["risk_band"]
+    bid.gate_status = summary["gate_status"]
 
 
 def _run_evaluation(bid_id: int, db: Session) -> None:
@@ -54,8 +87,19 @@ def _run_evaluation(bid_id: int, db: Session) -> None:
             ),
         )
 
-    # Clear any previous run so re-evaluating is idempotent.
+    # Clear any previous run so re-evaluating is idempotent. Officer
+    # overrides are decisions, not system output, so they carry over.
     prior = db.query(Evaluation).filter(Evaluation.bid_id == bid_id).all()
+    carried_overrides = {
+        row.requirement_id: (
+            row.officer_verdict,
+            row.override_reason,
+            row.officer_name,
+            row.overridden_at,
+        )
+        for row in prior
+        if row.officer_verdict
+    }
     for row in prior:
         db.delete(row)
     db.flush()
@@ -71,6 +115,7 @@ def _run_evaluation(bid_id: int, db: Session) -> None:
             status_code=500, detail="The evaluation produced no results."
         )
 
+    rows: list[Evaluation] = []
     for out in outcomes:
         row = Evaluation(
             bid_id=bid_id,
@@ -83,8 +128,17 @@ def _run_evaluation(bid_id: int, db: Session) -> None:
             explanation=out.explanation,
             recommended_action=out.recommended_action,
         )
+        override = carried_overrides.get(out.requirement_id)
+        if override and override[0] != out.verdict:
+            (
+                row.officer_verdict,
+                row.override_reason,
+                row.officer_name,
+                row.overridden_at,
+            ) = override
         db.add(row)
         db.flush()
+        rows.append(row)
 
         if out.source_document_id is not None:
             db.add(
@@ -100,11 +154,7 @@ def _run_evaluation(bid_id: int, db: Session) -> None:
                 )
             )
 
-    summary = compute_summary(outcomes)
-    bid.compliance_score = summary["overall_compliance"]
-    bid.risk_score = summary["risk_score"]
-    bid.risk_band = summary["risk_band"]
-    bid.gate_status = summary["gate_status"]
+    _apply_summary_to_bid(bid, rows)
     bid.status = "EVALUATED"
     bid.evaluated_at = datetime.now(timezone.utc)
     db.commit()
@@ -140,8 +190,8 @@ def _load_results(bid_id: int, db: Session) -> EvaluationResultsOut:
                 category=req.category,
                 obligation=req.obligation,
                 expected_condition=(req.rule_params or {}).get("expected_display", ""),
-                verdict=row.verdict,
-                score=row.score,
+                verdict=_effective_verdict(row),
+                score=_effective_score(row),
                 confidence=row.confidence,
                 evidence=ev.snippet if ev else "",
                 source_document=ev.document.original_filename if ev else "",
@@ -151,6 +201,12 @@ def _load_results(bid_id: int, db: Session) -> EvaluationResultsOut:
                 recommended_action=row.recommended_action,
                 decision_source=row.decision_source,
                 rule_trace=row.rule_trace or {},
+                system_verdict=row.verdict,
+                overridden=row.officer_verdict is not None,
+                officer_verdict=row.officer_verdict,
+                override_reason=row.override_reason or "",
+                officer_name=row.officer_name or "",
+                overridden_at=row.overridden_at,
             )
         )
 
@@ -183,4 +239,82 @@ def get_evaluation(bid_id: int, db: Session = Depends(get_db)):
 
 @router.get("/{bid_id}/results", response_model=EvaluationResultsOut)
 def get_evaluation_results(bid_id: int, db: Session = Depends(get_db)):
+    return _load_results(bid_id, db)
+
+
+@router.post("/{bid_id}/overrides", response_model=EvaluationResultsOut, status_code=201)
+def create_override(bid_id: int, payload: OverrideCreate, db: Session = Depends(get_db)):
+    """Record an officer's verdict for one requirement and audit it."""
+    bid = get_bid_or_404(bid_id, db)
+
+    verdict = payload.verdict.strip().upper()
+    reason = payload.reason.strip()
+    officer_name = payload.officer_name.strip()
+
+    if verdict not in VERDICTS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Verdict must be one of {', '.join(VERDICTS)}.",
+        )
+    if len(reason) < MIN_REASON_LENGTH:
+        raise HTTPException(
+            status_code=422,
+            detail=f"A reason of at least {MIN_REASON_LENGTH} characters is required.",
+        )
+    if not officer_name:
+        raise HTTPException(status_code=422, detail="The officer's name is required.")
+
+    row = (
+        db.query(Evaluation)
+        .filter(
+            Evaluation.bid_id == bid_id,
+            Evaluation.requirement_id == payload.requirement_id,
+        )
+        .first()
+    )
+    if row is None:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                f"No evaluation result for requirement {payload.requirement_id} "
+                "on this bid. Run a compliance evaluation first."
+            ),
+        )
+    if verdict == _effective_verdict(row):
+        raise HTTPException(
+            status_code=409,
+            detail=f"The requirement's verdict is already {verdict}.",
+        )
+
+    at = datetime.now(timezone.utc)
+    if verdict == row.verdict:
+        # Setting it back to the system's verdict withdraws the override.
+        row.officer_verdict = None
+        row.override_reason = ""
+        row.officer_name = ""
+        row.overridden_at = None
+    else:
+        row.officer_verdict = verdict
+        row.override_reason = reason
+        row.officer_name = officer_name
+        row.overridden_at = at
+
+    append_event(
+        db,
+        "VERDICT_OVERRIDE",
+        timestamp=utc_timestamp(at),
+        bid_id=bid.id,
+        bidder_name=bid.bidder_name,
+        requirement_id=row.requirement.id,
+        requirement_code=row.requirement.code,
+        requirement_title=row.requirement.title,
+        system_verdict=row.verdict,
+        officer_verdict=verdict,
+        reason=reason,
+        officer_name=officer_name,
+    )
+
+    rows = db.query(Evaluation).filter(Evaluation.bid_id == bid_id).all()
+    _apply_summary_to_bid(bid, rows)
+    db.commit()
     return _load_results(bid_id, db)

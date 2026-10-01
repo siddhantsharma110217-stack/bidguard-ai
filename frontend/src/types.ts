@@ -60,6 +60,8 @@ export interface BidDocument {
   page_count: number
   has_text_layer: boolean
   extracted_field_count: number
+  /** SHA-256 fingerprint taken when the document was loaded. */
+  sha256: string
 }
 
 export interface Bid {
@@ -100,6 +102,20 @@ export interface EvaluationResult {
   recommended_action: string
   decision_source: string
   rule_trace: Record<string, unknown>
+  /** `verdict` and `score` are effective values; these describe any override. */
+  system_verdict: Verdict
+  overridden: boolean
+  officer_verdict: Verdict | null
+  override_reason: string
+  officer_name: string
+  overridden_at: string | null
+}
+
+export interface OverrideRequest {
+  requirement_id: number
+  verdict: Verdict
+  reason: string
+  officer_name: string
 }
 
 export interface EvaluationSummary {
@@ -137,6 +153,37 @@ export interface Dashboard {
   demo_loaded: boolean
   demo_tender_id: number | null
   demo_bid_id: number | null
+}
+
+export type AuditEventType = 'VERDICT_OVERRIDE' | 'DOCUMENT_LOADED'
+
+export interface AuditEvent {
+  id: number
+  event_type: AuditEventType
+  timestamp: string
+  bid_id: number | null
+  bidder_name: string
+  requirement_id: number | null
+  requirement_code: string
+  requirement_title: string
+  system_verdict: Verdict | ''
+  officer_verdict: Verdict | ''
+  reason: string
+  officer_name: string
+  document_id: number | null
+  document_name: string
+  document_sha256: string
+  prev_hash: string
+  hash: string
+}
+
+export interface AuditVerification {
+  intact: boolean
+  total_events: number
+  verified_events: number
+  head_hash: string
+  first_broken: { id: number; position: number; reason: string } | null
+  checked_at: string
 }
 
 export interface ApiErrorBody {

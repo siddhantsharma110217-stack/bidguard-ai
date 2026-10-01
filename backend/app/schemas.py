@@ -69,6 +69,7 @@ class DocumentOut(BaseModel):
     page_count: int
     has_text_layer: bool
     extracted_field_count: int = 0
+    sha256: str = ""
 
 
 class BidOut(BaseModel):
@@ -124,6 +125,24 @@ class ResultOut(BaseModel):
     recommended_action: str
     decision_source: str
     rule_trace: dict
+    # `verdict`/`score` are the effective values; these describe any override.
+    system_verdict: str
+    overridden: bool = False
+    officer_verdict: str | None = None
+    override_reason: str = ""
+    officer_name: str = ""
+    overridden_at: datetime | None = None
+
+    @field_serializer("overridden_at")
+    def _ser_overridden_at(self, value: datetime | None) -> str | None:
+        return _as_utc(value)
+
+
+class OverrideCreate(BaseModel):
+    requirement_id: int
+    verdict: str
+    reason: str = ""
+    officer_name: str = ""
 
 
 class SummaryOut(BaseModel):
@@ -154,3 +173,40 @@ class DashboardOut(BaseModel):
     demo_loaded: bool
     demo_tender_id: int | None
     demo_bid_id: int | None
+
+
+class AuditEventOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    event_type: str
+    timestamp: str
+    bid_id: int | None
+    bidder_name: str
+    requirement_id: int | None
+    requirement_code: str
+    requirement_title: str
+    system_verdict: str
+    officer_verdict: str
+    reason: str
+    officer_name: str
+    document_id: int | None
+    document_name: str
+    document_sha256: str
+    prev_hash: str
+    hash: str
+
+
+class BrokenEventOut(BaseModel):
+    id: int
+    position: int
+    reason: str
+
+
+class AuditVerifyOut(BaseModel):
+    intact: bool
+    total_events: int
+    verified_events: int
+    head_hash: str
+    first_broken: BrokenEventOut | None
+    checked_at: str

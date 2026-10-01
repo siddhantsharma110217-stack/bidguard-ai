@@ -25,6 +25,7 @@ def _document_out(doc: Document) -> DocumentOut:
         page_count=doc.page_count,
         has_text_layer=doc.has_text_layer,
         extracted_field_count=len(doc.fields or {}),
+        sha256=doc.sha256 or "",
     )
 
 

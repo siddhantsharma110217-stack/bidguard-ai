@@ -87,7 +87,7 @@ export function DocumentsPage() {
       </div>
 
       <Card className="overflow-x-auto">
-        <table className="w-full min-w-[720px] text-sm">
+        <table className="w-full min-w-[860px] text-sm">
           <thead>
             <tr className="border-b border-border text-left text-xs font-medium uppercase tracking-wide text-text-faint">
               <th className="px-4 py-3">Document</th>
@@ -95,6 +95,7 @@ export function DocumentsPage() {
               <th className="px-4 py-3">Classification</th>
               <th className="px-4 py-3">Text Layer</th>
               <th className="px-4 py-3">Fields Extracted</th>
+              <th className="px-4 py-3">SHA-256 Fingerprint</th>
             </tr>
           </thead>
           <tbody>
@@ -116,6 +117,9 @@ export function DocumentsPage() {
                   )}
                 </td>
                 <td className="px-4 py-3 text-text-muted tabular-nums">{doc.extracted_field_count}</td>
+                <td className="px-4 py-3 font-mono text-[11px] text-text-faint" title={doc.sha256}>
+                  {doc.sha256 ? `${doc.sha256.slice(0, 16)}…` : 'Not recorded'}
+                </td>
               </tr>
             ))}
           </tbody>

@@ -78,6 +78,7 @@ export function ReportsPage() {
     (r) => r.obligation === 'MANDATORY' && (r.verdict === 'FAIL' || r.verdict === 'MISSING'),
   )
   const attentionItems = results.results.filter((r) => r.verdict !== 'PASS')
+  const overrides = results.results.filter((r) => r.overridden)
   const counts: Record<Verdict, number> = {
     PASS: summary.passed,
     REVIEW: summary.review,
@@ -179,6 +180,45 @@ export function ReportsPage() {
         </div>
       </Card>
 
+      {/* Officer overrides */}
+      <Card className="report-block p-5">
+        <h3 className="text-sm font-semibold text-text">Officer Overrides ({overrides.length})</h3>
+        {overrides.length === 0 ? (
+          <p className="mt-1 text-sm text-text-muted">
+            No verdicts were overridden — every finding below is the system's verdict.
+          </p>
+        ) : (
+          <>
+            <p className="mt-1 text-sm text-text-muted">
+              Verdicts changed by an evaluating officer. Scores and responsiveness above use the
+              officer's verdict; each change is recorded in the tamper-evident audit log.
+            </p>
+            <ul className="mt-3 space-y-3">
+              {overrides.map((r) => (
+                <li
+                  key={r.requirement_id}
+                  className="report-item border-t border-border pt-3 text-sm first:border-0 first:pt-0"
+                >
+                  <div className="font-medium text-text">
+                    {r.requirement_code} — {r.requirement_title}
+                  </div>
+                  <p className="mt-1 text-text-muted">
+                    <span className="font-medium text-text">
+                      {r.system_verdict} → {r.verdict}
+                    </span>
+                    , {r.override_reason}
+                  </p>
+                  <p className="mt-1 text-xs text-text-faint">
+                    Overridden by {r.officer_name}
+                    {r.overridden_at && ` on ${formatTimestamp(r.overridden_at)}`}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </Card>
+
       {/* Blocking requirements */}
       <Card className="report-block border-fail/30 p-5">
         <h3 className="text-sm font-semibold text-text">
@@ -238,6 +278,11 @@ export function ReportsPage() {
                 <td className="px-4 py-3 font-medium text-text">{r.requirement_title}</td>
                 <td className="px-4 py-3">
                   <VerdictBadge verdict={r.verdict} />
+                  {r.overridden && (
+                    <div className="mt-1 text-[11px] whitespace-nowrap text-text-faint">
+                      {r.system_verdict} → {r.verdict} (officer)
+                    </div>
+                  )}
                 </td>
                 <td className="px-4 py-3 tabular-nums text-text">{r.score.toFixed(0)}</td>
                 <td className="px-4 py-3 text-xs text-text-muted">
@@ -286,7 +331,8 @@ export function ReportsPage() {
                     {r.requirement_code} — {r.requirement_title}
                   </span>
                   <span className="text-xs text-text-faint">
-                    ({r.obligation.toLowerCase()}, decided by {r.decision_source})
+                    ({r.obligation.toLowerCase()}, decided by{' '}
+                    {r.overridden ? `officer ${r.officer_name}` : r.decision_source})
                   </span>
                 </div>
                 <p className="mt-1 text-sm text-text-muted">{r.explanation}</p>
